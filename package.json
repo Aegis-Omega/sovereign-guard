@@ -1,0 +1,42 @@
+{
+    "name": "sovereign-guard",
+    "version": "1.0.0",
+    "description": "The only AI auditor that signs its own patches. Scan, fix, and seal your codebase.",
+    "bin": {
+        "sovereign-guard": "./dist/bin/guard.js",
+        "guard": "./dist/bin/guard.js"
+    },
+    "main": "./dist/src/index.js",
+    "types": "./dist/src/index.d.ts",
+    "scripts": {
+        "build": "tsc",
+        "dev": "tsx bin/guard.ts",
+        "guard": "tsx bin/guard.ts",
+        "bench": "tsx bin/guard.ts scan . --silent",
+        "audit:clinical": "tsx bin/guard.ts audit ../../substrate/shards/intel/datasets/boone_county_npp.md",
+        "test:rag": "tsx bin/guard.ts scan ../../substrate/shards/intel/datasets/boone_county_npp.md --min-severity HIGH"
+    },
+    "keywords": [
+        "audit",
+        "security",
+        "typescript",
+        "ai",
+        "code-quality",
+        "linter",
+        "sovereign-guard"
+    ],
+    "license": "MIT",
+    "dependencies": {
+        "@ai-sdk/google": "^3.0.29",
+        "ai": "^6.0.91",
+        "commander": "^13.1.0"
+    },
+    "devDependencies": {
+        "@types/node": "^20",
+        "tsx": "^4.21.0",
+        "typescript": "^5"
+    },
+    "engines": {
+        "node": ">=18"
+    }
+}

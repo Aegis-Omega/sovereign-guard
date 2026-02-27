@@ -1,0 +1,297 @@
+# ◈ Sovereign Guard — Audit Report
+
+| Metric | Value |
+|:---|:---|
+| Target | `d:\my-sovereign-project\agent-app\lib` |
+| Files Scanned | 87 |
+| Total Findings | **140** |
+| Critical | 0 |
+| High | 140 |
+| Medium | 0 |
+| Low | 0 |
+| Timestamp | 2026-02-25T06:09:00.072Z |
+
+## Findings
+
+### HIGH (140)
+
+- **shell/boot.ts:28** — Async function 'bootSequence' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **shell/commands/audit.ts:10** — Async function 'auditCommand' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **shell/commands/deploy.ts:14** — Async function 'deployCommand' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **shell/commands/evolve.ts:101** — Async function 'promptUser' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **shell/commands/feed.ts:7** — Async function 'feedCommand' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **shell/commands/harvest.ts:18** — Async function 'harvestCommand' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **shell/commands/meta.ts:168** — Async function 'homeostaticLoop' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **shell/commands/meta.ts:184** — Async function 'metaMeta' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **shell/commands/meta.ts:196** — Async function 'metaCommand' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **shell/commands/prune.ts:10** — Async function 'pruneCommand' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **shell/commands/pulse.ts:8** — Async function 'pulseCommand' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **shell/commands/scan.ts:46** — Async function 'scanCommand' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **shell/commands/think.ts:37** — Async function 'thinkCommand' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **shell/commands/watch.ts:16** — Async function 'watchCommand' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **shell/is.ts:85** — Async function 'postCommandPulse' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **shell/is.ts:136** — Async function 'ghostMerge' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **shell/organs/brain.ts:146** — Async function 'generatePatch' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/adversarial_auditor.ts:14** — Async function 'conductAudit' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/agentic_wallet.ts:45** — Async function 'derivePrivateKey' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/agentic_wallet.ts:63** — Async function 'requestTransaction' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/agentic_wallet.ts:121** — Async function 'transferToGovernor' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/agentic_wallet.ts:151** — Async function 'executePersonalOfframp' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/agentic_wallet.ts:170** — Async function 'executeSepoliaTransfer' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/agentic_wallet.ts:187** — Async function 'getAddress' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/architect_cortex.ts:31** — Async function 'scanAndIntegrateTools' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/architect_cortex.ts:57** — Async function 'scanMCPServers' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/architect_cortex.ts:74** — Async function 'integrateTool' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/architect_cortex.ts:90** — Async function 'executeSystem3Audit' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/architect_cortex.ts:114** — Async function 'logCodeExecution' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/architect_cortex.ts:126** — Async function 'pruneSimulationRot' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/architect_cortex.ts:145** — Async function 'identifyScalingGaps' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/architect_cortex.ts:155** — Async function 'triggerMetacognitiveRefactor' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/architect_cortex.ts:176** — Async function 'runOmnipotentAudit' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/biomass_monitor.ts:31** — Async function 'monitoringLoop' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/boring_semantic_layer.ts:24** — Async function 'auditHarvestLineage' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/bsl_governor.ts:26** — Async function 'verifyCLLAudit' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/bsl_governor.ts:50** — Async function 'queryMetrics' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/context_folding.ts:25** — Async function 'foldReasoning' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/cortex.ts:34** — Async function 'initialize' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/cortex.ts:162** — Async function 'opceExecutionLoop' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/cortex.ts:202** — Async function 'triReasoningConsensus' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/cortex.ts:217** — Async function 'reasonArchitect' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/cortex.ts:224** — Async function 'reasonHacker' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/cortex.ts:231** — Async function 'reasonCFO' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/cortex.ts:244** — Async function 'calculateSuccessProbability' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/cortex.ts:259** — Async function 'checkBiomassCapacity' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/cortex.ts:308** — Async function 'rotateSalt' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/cortex.ts:321** — Async function 'recordReflection' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/cortex.ts:334** — Async function 'pulse' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/cortex.ts:371** — Async function 'getCognitiveState' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/cortex.ts:388** — Async function 'processSentientEvent' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/cortex.ts:409** — Async function 'performCodePruning' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/cortex.ts:428** — Async function 'evolveSystemSubstrate' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/cortex.ts:452** — Async function 'initEra6' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/cortex.ts:471** — Async function 'runLegislativeLoop' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/cortex.ts:473** — Async function 'anonymous' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/cortex.ts:482** — Async function 'runSentinelSwarm' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/cortex.ts:484** — Async function 'anonymous' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/evolution_validator.ts:12** — Async function 'sealEvolution' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/evolution_validator.ts:26** — Async function 'validateSubstrate' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/execute_strike.ts:12** — Async function 'executeKineticStrike' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/fintech.ts:31** — Async function 'processRetainer' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/fintech.ts:54** — Async function 'handleSuccessfulPayment' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/key_export.ts:10** — Async function 'exportSovereignKey' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/kimi_bridge.ts:31** — Async function 'verifyKineticIntent' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/kybernetikos_expansion.ts:17** — Async function 'initiateExpansion' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/kybernetikos_expansion.ts:61** — Async function 'steerTowardTarget' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/leads.ts:27** — Async function 'discoverLeads' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/leads.ts:72** — Async function 'submitForVerification' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/legal_shards.ts:14** — Async function 'generateAndSealBAA' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/lifequest.ts:43** — Async function 'tick' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/lifequest.ts:81** — Async function 'initiateWintering' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/lifequest.ts:90** — Async function 'triggerSilentCleanup' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/liquidity_sink.ts:32** — Async function 'performLiquidityRouting' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/liquidity_sink.ts:72** — Async function 'getGasEntropy' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/liquid_harvest.ts:14** — Async function 'transfuse' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/mainnet_stake_finality.ts:10** — Async function 'lockPhysicalStake' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/metabolic_deployment.ts:6** — Async function 'deploy' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/metabolic_deployment.ts:21** — Async function 'deployMetabolicNode' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/metabolic_limit.ts:19** — Async function 'entangleWithLedger' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/meta_critic.ts:14** — Async function 'performAudit' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/meta_critic.ts:31** — Async function 'evolveHeuristics' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/obsidian_bridge.ts:24** — Async function 'sealSettlementShard' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/obsidian_bridge.ts:68** — Async function 'scanResearchNotes' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/omnipotent_steering.ts:11** — Async function 'initiateOmnipotentStrike' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/ouroboros_feed.ts:17** — Async function 'performMetabolicFeed' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/procurement_actuator.ts:15** — Async function 'executeProcurement' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/procurement_manifest.ts:26** — Async function 'generateScalingStrategy' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/quantum_string.ts:13** — Async function 'achieveStringEntanglement' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/quantum_string.ts:48** — Async function 'verifyEntanglement' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/reality_audit.ts:12** — Async function 'performRealityAudit' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/rhizome_scaling.ts:14** — Async function 'pushRhizome' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/riemann_node.ts:13** — Async function 'generateAnchor' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/riemann_node.ts:27** — Async function 'executeStrike' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/rlm.ts:32** — Async function 'processRecursiveQuery' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/saga.ts:35** — Async function 'checkSagaAuth' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/sdk/atomic_executor.ts:14** — Async function 'execute' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/sdk/bsl.ts:14** — Async function 'recall' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/sdk/bsl.ts:42** — Async function 'commit' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/sdk/compiler.ts:14** — Async function 'compile' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/sdk/kernel.ts:17** — Async function 'executeTask' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/sdk/kinetic_strike.ts:18** — Async function 'armStrike' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/sdk/kinetic_strike.ts:52** — Async function 'executeStrike' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/sdk/manifestation_engine.ts:18** — Async function 'calculatePotential' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/sdk/manifestation_engine.ts:34** — Async function 'manifest' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/sdk/market_transfusion.ts:17** — Async function 'transfuse' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/sdk/negentropy_kernel.ts:17** — Async function 'filterNoise' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/sdk/negentropy_kernel.ts:37** — Async function 'foldContext' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/sdk/negentropy_kernel.ts:55** — Async function 'pruneEntropy' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/sdk/omega_engine.ts:14** — Async function 'initiateSingularity' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/sdk/omega_engine.ts:24** — Async function 'syncHiveintent' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/sdk/physical_harvest.ts:15** — Async function 'executeFinalHarvest' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/sdk/recursive_optimizer.ts:19** — Async function 'anonymous' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/sdk/recursive_optimizer.ts:27** — Async function 'pulse' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/sdk/substrate_sync.ts:12** — Async function 'syncState' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/sentinel.ts:51** — Async function 'checkVitality' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/sentinel.ts:68** — Async function 'restoreNode' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/sentinel.ts:88** — Async function 'handlePartition' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/sentinel.ts:104** — Async function 'runShadowAudit' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/sentinel_shield.ts:26** — Async function 'auditProbe' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/sentinel_shield.ts:44** — Async function 'blockEntity' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/sepolia_bridge.ts:11** — Async function 'initiateSepoliaBridge' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/singularity_collapse.ts:13** — Async function 'collapse' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/spsf.ts:60** — Async function 'persistTurn' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/spsf.ts:79** — Async function 'getAgentState' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/spsf.ts:88** — Async function 'sealAction' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/spsf.ts:115** — Async function 'recordEvent' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/spsf.ts:144** — Async function 'store' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/spsf.ts:151** — Async function 'retrieve' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/stablecoin_vault.ts:30** — Async function 'allocateToSink' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/stripe_api.ts:11** — Async function 'createRetainerSession' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/tavily_api.ts:15** — Async function 'probeLead' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/the_equal_sign.ts:78** — Async function 'sealWinningShard' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/the_equal_sign.ts:87** — Async function 'triggerRecursiveAutopsy' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/transfusion.ts:36** — Async function 'transfuse' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/treasury_reporter.ts:16** — Async function 'generate30DayReport' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/treasury_reporter.ts:64** — Async function 'getMetabolicStats' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/unified_context_mesh.ts:26** — Async function 'queryContext' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/vcm.ts:107** — Async function 'getVcmLimit' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.
+- **sovereign/wintering_protocol.ts:11** — Async function 'executeWintering' has no error handling.
+  - Fix: Wrap body in try/catch or add .catch() to the promise chain.

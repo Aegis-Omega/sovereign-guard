@@ -1,0 +1,13 @@
+node_modules/
+dist/
+dist-commercial/
+*.log
+.env
+.env.local
+vault/Invoices/
+vault/Letters/
+vault/Certificates/
+vault/Settlement_Report.md
+vault/Maintenance_Report.md
+vault/Harvest_Report.md
+vault/Harvest_Targets.md

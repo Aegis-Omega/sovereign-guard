@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sovereign Guard — AI-Powered Code Auditor</title>
+    <meta name="description"
+        content="Scan your TypeScript/JavaScript codebase for security issues, code smells, and compliance gaps. AI-powered patches. Cryptographic provenance seal. Free to start.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0a0a0f;
+            --surface: #12121a;
+            --surface-2: #1a1a28;
+            --border: #2a2a3a;
+            --text: #e4e4ef;
+            --text-dim: #8888a0;
+            --accent: #7c5cff;
+            --accent-glow: #7c5cff40;
+            --green: #34d399;
+            --green-glow: #34d39940;
+            --red: #f87171;
+            --yellow: #fbbf24;
+            --orange: #fb923c;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* Ambient glow */
+        body::before {
+            content: '';
+            position: fixed;
+            top: -40%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 800px;
+            height: 800px;
+            background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 0 24px;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Nav */
+        nav {
+            padding: 20px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-weight: 800;
+            font-size: 1.1rem;
+            color: var(--accent);
+            letter-spacing: -0.5px;
+        }
+
+        .logo span {
+            color: var(--text);
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 28px;
+            align-items: center;
+        }
+
+        .nav-links a {
+            color: var(--text-dim);
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        .nav-links a:hover {
+            color: var(--text);
+        }
+
+        /* Hero */
+        .hero {
+            text-align: center;
+            padding: 100px 0 80px;
+        }
+
+        .badge {
+            display: inline-block;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            color: var(--green);
+            font-weight: 500;
+            margin-bottom: 24px;
+        }
+
+        h1 {
+            font-size: clamp(2.5rem, 6vw, 4rem);
+            font-weight: 800;
+            letter-spacing: -2px;
+            line-height: 1.1;
+            margin-bottom: 20px;
+        }
+
+        h1 .highlight {
+            background: linear-gradient(135deg, var(--accent) 0%, #a78bfa 50%, var(--green) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero p {
+            font-size: 1.15rem;
+            color: var(--text-dim);
+            max-width: 600px;
+            margin: 0 auto 40px;
+        }
+
+        /* CTA */
+        .cta-group {
+            display: flex;
+            gap: 14px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 14px 28px;
+            border-radius: 10px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.2s;
+            border: none;
+            cursor: pointer;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: #fff;
+            box-shadow: 0 0 30px var(--accent-glow);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0 50px var(--accent-glow);
+        }
+
+        .btn-secondary {
+            background: var(--surface-2);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            background: var(--surface);
+            border-color: var(--accent);
+        }
+
+        /* Terminal mockup */
+        .terminal {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            max-width: 700px;
+            margin: 60px auto 0;
+            overflow: hidden;
+            text-align: left;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        }
+
+        .terminal-bar {
+            padding: 12px 16px;
+            background: var(--surface-2);
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .terminal-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .terminal-dot.r {
+            background: #f87171;
+        }
+
+        .terminal-dot.y {
+            background: #fbbf24;
+        }
+
+        .terminal-dot.g {
+            background: #34d399;
+        }
+
+        .terminal-title {
+            color: var(--text-dim);
+            font-size: 0.75rem;
+            margin-left: 8px;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .terminal-body {
+            padding: 20px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            line-height: 1.8;
+        }
+
+        .t-prompt {
+            color: var(--green);
+        }
+
+        .t-cmd {
+            color: var(--text);
+        }
+
+        .t-dim {
+            color: var(--text-dim);
+        }
+
+        .t-accent {
+            color: var(--accent);
+        }
+
+        .t-warn {
+            color: var(--yellow);
+        }
+
+        .t-err {
+            color: var(--red);
+        }
+
+        .t-ok {
+            color: var(--green);
+        }
+
+        /* Features */
+        .features {
+            padding: 100px 0;
+        }
+
+        .features h2 {
+            text-align: center;
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 60px;
+            letter-spacing: -1px;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .feature-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 32px;
+            transition: all 0.3s;
+        }
+
+        .feature-card:hover {
+            border-color: var(--accent);
+            transform: translateY(-4px);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .feature-icon {
+            font-size: 1.8rem;
+            margin-bottom: 16px;
+        }
+
+        .feature-card h3 {
+            font-size: 1.15rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .feature-card p {
+            color: var(--text-dim);
+            font-size: 0.9rem;
+        }
+
+        /* Rules table */
+        .rules {
+            padding: 80px 0;
+        }
+
+        .rules h2 {
+            text-align: center;
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 16px;
+            letter-spacing: -1px;
+        }
+
+        .rules .subtitle {
+            text-align: center;
+            color: var(--text-dim);
+            margin-bottom: 40px;
+        }
+
+        .rules-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+            gap: 12px;
+        }
+
+        .rule-item {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 16px 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .severity {
+            font-size: 0.65rem;
+            font-weight: 700;
+            padding: 3px 8px;
+            border-radius: 4px;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
+        }
+
+        .severity.crit {
+            background: #f8717130;
+            color: var(--red);
+        }
+
+        .severity.high {
+            background: #fb923c30;
+            color: var(--orange);
+        }
+
+        .severity.med {
+            background: #fbbf2430;
+            color: var(--yellow);
+        }
+
+        .severity.low {
+            background: #34d39930;
+            color: var(--green);
+        }
+
+        .rule-name {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.82rem;
+            color: var(--text);
+        }
+
+        /* Pricing */
+        .pricing {
+            padding: 80px 0;
+        }
+
+        .pricing h2 {
+            text-align: center;
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 60px;
+            letter-spacing: -1px;
+        }
+
+        .pricing-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .price-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 36px;
+            text-align: center;
+        }
+
+        .price-card.featured {
+            border-color: var(--accent);
+            box-shadow: 0 0 40px var(--accent-glow);
+            position: relative;
+        }
+
+        .price-card.featured::before {
+            content: 'POPULAR';
+            position: absolute;
+            top: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--accent);
+            color: #fff;
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 4px 16px;
+            border-radius: 12px;
+            letter-spacing: 1px;
+        }
+
+        .price-card h3 {
+            font-size: 1.2rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .price {
+            font-size: 2.8rem;
+            font-weight: 800;
+            letter-spacing: -2px;
+            margin: 16px 0;
+        }
+
+        .price span {
+            font-size: 1rem;
+            color: var(--text-dim);
+            font-weight: 400;
+        }
+
+        .price-features {
+            list-style: none;
+            text-align: left;
+            margin: 24px 0 28px;
+        }
+
+        .price-features li {
+            padding: 8px 0;
+            color: var(--text-dim);
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .price-features li::before {
+            content: '✓';
+            color: var(--green);
+            font-weight: 700;
+        }
+
+        .price-card .btn {
+            width: 100%;
+            justify-content: center;
+        }
+
+        /* Footer */
+        footer {
+            padding: 60px 0;
+            border-top: 1px solid var(--border);
+            text-align: center;
+            color: var(--text-dim);
+            font-size: 0.85rem;
+        }
+
+        footer a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        /* Email capture */
+        .email-form {
+            display: flex;
+            gap: 10px;
+            max-width: 420px;
+            margin: 0 auto;
+        }
+
+        .email-form input {
+            flex: 1;
+            padding: 14px 18px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text);
+            font-size: 0.9rem;
+            font-family: 'Inter', sans-serif;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .email-form input:focus {
+            border-color: var(--accent);
+        }
+
+        .email-form input::placeholder {
+            color: var(--text-dim);
+        }
+
+        @media (max-width: 600px) {
+            .cta-group {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .email-form {
+                flex-direction: column;
+            }
+
+            .nav-links {
+                gap: 16px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <nav>
+            <div class="logo">◈ <span>Sovereign Guard</span></div>
+            <div class="nav-links">
+                <a href="#features">Features</a>
+                <a href="#rules">Rules</a>
+                <a href="#pricing">Pricing</a>
+                <a href="https://github.com/" class="btn btn-secondary"
+                    style="padding: 8px 18px; font-size: 0.85rem;">GitHub</a>
+            </div>
+        </nav>
+    </div>
+
+    <section class="hero">
+        <div class="container">
+            <div class="badge">✦ Open Source — MIT Licensed</div>
+            <h1>
+                Find bugs.<br>
+                <span class="highlight">Fix them with AI.</span><br>
+                Prove it cryptographically.
+            </h1>
+            <p>
+                Scan your TypeScript & JavaScript codebase for security issues, compliance gaps, and tech debt. Get
+                AI-powered patches and a cryptographic seal proving your code was audited.
+            </p>
+            <div class="cta-group">
+                <a href="#install" class="btn btn-primary">
+                    <span>⟩</span> npx sovereign-guard scan
+                </a>
+                <a href="#pricing" class="btn btn-secondary">
+                    View Pricing →
+                </a>
+            </div>
+
+            <div class="terminal">
+                <div class="terminal-bar">
+                    <div class="terminal-dot r"></div>
+                    <div class="terminal-dot y"></div>
+                    <div class="terminal-dot g"></div>
+                    <span class="terminal-title">Terminal — sovereign-guard</span>
+                </div>
+                <div class="terminal-body">
+                    <div><span class="t-prompt">$</span> <span class="t-cmd">npx sovereign-guard scan ./src</span></div>
+                    <br>
+                    <div><span class="t-accent">◈ Sovereign Guard v1.0.0</span></div>
+                    <div><span class="t-dim"> Scanning 47 files...</span></div>
+                    <br>
+                    <div><span class="t-err"> CRITICAL</span> <span class="t-dim">no-hardcoded-secrets</span></div>
+                    <div><span class="t-dim"> → src/config.ts:12 — API key found in source code</span></div>
+                    <br>
+                    <div><span class="t-warn"> HIGH</span> <span class="t-dim">no-silent-catch</span></div>
+                    <div><span class="t-dim"> → src/api.ts:45 — Empty catch block swallows errors</span></div>
+                    <br>
+                    <div><span class="t-ok"> ◈ 2 CRITICAL · 5 HIGH · 12 MEDIUM · 8 LOW</span></div>
+                    <div><span class="t-ok"> ◈ Scan complete. 27 findings in 0.8s</span></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="features" id="features">
+        <div class="container">
+            <h2>Ship safer code, faster.</h2>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">🔍</div>
+                    <h3>16 Security Rules</h3>
+                    <p>From hardcoded secrets to empty catch blocks, deprecated APIs to missing audit trails. Catches
+                        what ESLint misses.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🤖</div>
+                    <h3>AI-Powered Patches</h3>
+                    <p>Powered by Google Gemini. Don't just find the bug — generate the fix, reviewed and ready to
+                        apply.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔏</div>
+                    <h3>Cryptographic Seal</h3>
+                    <p>SHA-256 provenance stamp proves your code was audited at a specific point in time. Verifiable by
+                        anyone.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h3>Zero Config</h3>
+                    <p>Run <code>npx sovereign-guard scan</code> and get results in seconds. No setup, no accounts, no
+                        friction.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🏗️</div>
+                    <h3>CI/CD Ready</h3>
+                    <p>JSON output, exit code 1 on critical findings. Drop it into GitHub Actions, GitLab CI, or any
+                        pipeline.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📋</div>
+                    <h3>Compliance Reports</h3>
+                    <p>Generate professional markdown audit reports. Share with your team, auditors, or clients.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="rules" id="rules">
+        <div class="container">
+            <h2>16 Rules. Zero False Confidence.</h2>
+            <p class="subtitle">Every rule catches real bugs that ship to production.</p>
+            <div class="rules-grid">
+                <div class="rule-item"><span class="severity crit">CRITICAL</span><span
+                        class="rule-name">no-hardcoded-secrets</span></div>
+                <div class="rule-item"><span class="severity crit">CRITICAL</span><span
+                        class="rule-name">hipaa-2026-audit</span></div>
+                <div class="rule-item"><span class="severity crit">CRITICAL</span><span
+                        class="rule-name">dora-ict-risk</span></div>
+                <div class="rule-item"><span class="severity crit">CRITICAL</span><span
+                        class="rule-name">eu-ai-act</span></div>
+                <div class="rule-item"><span class="severity high">HIGH</span><span
+                        class="rule-name">no-silent-catch</span></div>
+                <div class="rule-item"><span class="severity high">HIGH</span><span
+                        class="rule-name">missing-error-handling</span></div>
+                <div class="rule-item"><span class="severity high">HIGH</span><span
+                        class="rule-name">no-math-random</span></div>
+                <div class="rule-item"><span class="severity high">HIGH</span><span
+                        class="rule-name">no-agent-auth-profile</span></div>
+                <div class="rule-item"><span class="severity med">MEDIUM</span><span
+                        class="rule-name">no-any-type</span></div>
+                <div class="rule-item"><span class="severity med">MEDIUM</span><span
+                        class="rule-name">no-placeholder-logic</span></div>
+                <div class="rule-item"><span class="severity med">MEDIUM</span><span
+                        class="rule-name">missing-audit-trail</span></div>
+                <div class="rule-item"><span class="severity med">MEDIUM</span><span
+                        class="rule-name">deprecated-api</span></div>
+                <div class="rule-item"><span class="severity low">LOW</span><span
+                        class="rule-name">no-console-log</span></div>
+                <div class="rule-item"><span class="severity low">LOW</span><span
+                        class="rule-name">complexity-spike</span></div>
+                <div class="rule-item"><span class="severity low">LOW</span><span
+                        class="rule-name">unused-imports</span></div>
+                <div class="rule-item"><span class="severity low">LOW</span><span class="rule-name">todo-debt</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="pricing" id="pricing">
+        <div class="container">
+            <h2>Start free. Scale when ready.</h2>
+            <div class="pricing-grid">
+                <div class="price-card">
+                    <h3>Open Source</h3>
+                    <div class="price">$0 <span>forever</span></div>
+                    <ul class="price-features">
+                        <li>Full codebase scanning</li>
+                        <li>16 security & compliance rules</li>
+                        <li>Terminal, JSON, Markdown output</li>
+                        <li>CI/CD integration</li>
+                        <li>Community support</li>
+                    </ul>
+                    <a href="#install" class="btn btn-secondary">Install Free</a>
+                </div>
+                <div class="price-card featured">
+                    <h3>Pro</h3>
+                    <div class="price">$49 <span>/month</span></div>
+                    <ul class="price-features">
+                        <li>Everything in Open Source</li>
+                        <li>AI-powered auto-patching (Gemini)</li>
+                        <li>Cryptographic Provenance Seal</li>
+                        <li>Compliance certificate generation</li>
+                        <li>Priority email support</li>
+                    </ul>
+                    <a href="#waitlist" class="btn btn-primary" id="pro-btn">Join Waitlist</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section style="padding: 80px 0; text-align: center;" id="waitlist">
+        <div class="container">
+            <h2 style="font-size: 1.8rem; margin-bottom: 16px;">Get early access to Pro.</h2>
+            <p style="color: var(--text-dim); margin-bottom: 32px;">Be first to know when AI patching and compliance
+                certificates launch.</p>
+            <form class="email-form" action="https://formspree.io/f/YOUR_FORM_ID" method="POST">
+                <input type="email" name="email" placeholder="your@email.com" required>
+                <button type="submit" class="btn btn-primary">Join Waitlist</button>
+            </form>
+        </div>
+    </section>
+
+    <section style="padding: 80px 0; text-align: center;" id="install">
+        <div class="container">
+            <h2 style="font-size: 1.8rem; margin-bottom: 32px;">Try it now. One command.</h2>
+            <div class="terminal" style="max-width: 500px; margin: 0 auto;">
+                <div class="terminal-bar">
+                    <div class="terminal-dot r"></div>
+                    <div class="terminal-dot y"></div>
+                    <div class="terminal-dot g"></div>
+                </div>
+                <div class="terminal-body" style="text-align: center;">
+                    <code style="font-size: 1.1rem; color: var(--green); cursor: pointer;"
+                        onclick="navigator.clipboard.writeText('npx sovereign-guard scan .')">
+                        npx sovereign-guard scan .
+                    </code>
+                    <div style="margin-top: 8px; font-size: 0.75rem; color: var(--text-dim);">Click to copy</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <p>
+                ◈ Sovereign Guard — MIT Licensed — Built in 🇧🇦 Bosnia & Herzegovina
+            </p>
+            <p style="margin-top: 8px;">
+                <a href="https://github.com/">GitHub</a> ·
+                <a href="https://npmjs.com/package/sovereign-guard">NPM</a>
+            </p>
+        </div>
+    </footer>
+</body>
+
+</html>
