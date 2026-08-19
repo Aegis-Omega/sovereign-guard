@@ -81,8 +81,8 @@ export interface GuardConfig {
 }
 
 export const DEFAULT_CONFIG: GuardConfig = {
-    include: ['**/*.ts', '**/*.js'],
-    exclude: ['node_modules/**', 'dist/**', '.next/**', 'coverage/**', '*.d.ts'],
+    include: ['**/*.ts', '**/*.js', '**/*.py'],
+    exclude: ['node_modules/**', 'dist/**', '.next/**', 'coverage/**', '*.d.ts', '.venv/**', 'venv/**', '__pycache__/**'],
     disableRules: [],
     minSeverity: 'LOW',
     maxFiles: 500,
