@@ -1,33 +1,80 @@
-# This workflow will run tests using node and then publish a package to GitHub Packages when a release is created
-# For more information see: https://docs.github.com/en/actions/publishing-packages/publishing-nodejs-packages
-
-name: Node.js Package
+name: NPM Verified Release
 
 on:
   release:
     types: [created]
 
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
-  build:
+  verify-package:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+      - name: Assert release tag resolves to checked-out commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag='${{ github.event.release.tag_name }}'
+          test "$(git rev-parse HEAD)" = "$(git rev-parse "${tag}^{commit}")"
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
+          registry-url: https://registry.npmjs.org/
       - run: npm ci
+      - run: npm run build
       - run: npm test
+      - name: Produce exact npm tarball and receipt
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          KEEP_NPM_TARBALL: '1'
+        run: npm run verify:package
+      - name: Upload verified npm artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sovereign-guard-npm-${{ github.sha }}
+          path: |
+            sovereign-guard-*.tgz
+            artifacts/NpmPackageReceiptV1.json
+          if-no-files-found: error
+          retention-days: 90
 
   publish-npm:
-    needs: build
+    needs: verify-package
     runs-on: ubuntu-latest
+    environment: npm
     steps:
-      - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           registry-url: https://registry.npmjs.org/
-      - run: npm ci
-      - run: npm publish
+      - uses: actions/download-artifact@v4
+        with:
+          name: sovereign-guard-npm-${{ github.sha }}
+          path: verified-package
+      - name: Assert exactly one verified tarball
+        id: tarball
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t tgz < <(find verified-package -maxdepth 1 -type f -name 'sovereign-guard-*.tgz' -print)
+          test "${#tgz[@]}" -eq 1
+          echo "path=${tgz[0]}" >> "$GITHUB_OUTPUT"
+      - name: Reverify tarball digest against receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          tgz='${{ steps.tarball.outputs.path }}'
+          expected="$(node -e "const r=require('./verified-package/artifacts/NpmPackageReceiptV1.json'); process.stdout.write(r.package.sha256)")"
+          actual="$(sha256sum "$tgz" | awk '{print $1}')"
+          test "$actual" = "$expected"
+      - name: Publish the verified tarball with provenance
         env:
-          NODE_AUTH_TOKEN: ${{secrets.npm_token}}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN || secrets.npm_token }}
+        run: npm publish '${{ steps.tarball.outputs.path }}' --provenance --access public
