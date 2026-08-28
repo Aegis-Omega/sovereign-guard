@@ -34,6 +34,34 @@ function canonical(value) {
   return value;
 }
 
+function runPack() {
+  const packRaw = command('npm', ['pack', '--json', '--ignore-scripts']);
+  const pack = JSON.parse(packRaw);
+  if (!Array.isArray(pack) || pack.length !== 1) {
+    throw new Error(
+      `expected exactly one npm pack result, received ${Array.isArray(pack) ? pack.length : 'non-array'}`,
+    );
+  }
+
+  const meta = pack[0];
+  const tarball = resolve(root, meta.filename);
+  const bytes = readFileSync(tarball);
+  const files = [...(meta.files ?? [])]
+    .map((file) => ({ path: file.path, size: file.size, mode: file.mode ?? null }))
+    .sort((a, b) => a.path.localeCompare(b.path));
+  const fileCensusCanonical = JSON.stringify(canonical(files));
+
+  return {
+    meta,
+    tarball,
+    bytes,
+    files,
+    sha256: digest('sha256', bytes),
+    sha512: digest('sha512', bytes),
+    fileCensusSha256: digest('sha256', Buffer.from(fileCensusCanonical)),
+  };
+}
+
 const sourceSha = process.env.AEGIS_SOURCE_SHA || command('git', ['rev-parse', 'HEAD']);
 if (!/^[0-9a-f]{40}$/i.test(sourceSha)) {
   throw new Error(`invalid source SHA: ${sourceSha}`);
@@ -48,18 +76,24 @@ if (process.env.RELEASE_TAG && process.env.RELEASE_TAG !== `v${pkg.version}`) {
   throw new Error(`release tag/version mismatch: tag=${process.env.RELEASE_TAG} package=v${pkg.version}`);
 }
 
-const packRaw = command('npm', ['pack', '--json', '--ignore-scripts']);
-const pack = JSON.parse(packRaw);
-if (!Array.isArray(pack) || pack.length !== 1) {
-  throw new Error(`expected exactly one npm pack result, received ${Array.isArray(pack) ? pack.length : 'non-array'}`);
-}
-
-const packed = pack[0];
-const tarball = resolve(root, packed.filename);
-const tarBytes = readFileSync(tarball);
+const first = runPack();
+rmSync(first.tarball, { force: true });
+const second = runPack();
 
 try {
-  const packedManifest = JSON.parse(command('tar', ['-xOf', tarball, 'package/package.json']));
+  const reproducible =
+    first.sha256 === second.sha256 &&
+    first.sha512 === second.sha512 &&
+    first.meta.shasum === second.meta.shasum &&
+    first.meta.integrity === second.meta.integrity &&
+    first.fileCensusSha256 === second.fileCensusSha256;
+  if (!reproducible) {
+    throw new Error(
+      `npm pack is not reproducible: sha256 ${first.sha256} != ${second.sha256} or metadata/census differs`,
+    );
+  }
+
+  const packedManifest = JSON.parse(command('tar', ['-xOf', second.tarball, 'package/package.json']));
   if (packedManifest.name !== pkg.name || packedManifest.version !== pkg.version) {
     throw new Error(
       `packed manifest identity mismatch: committed=${pkg.name}@${pkg.version} packed=${packedManifest.name}@${packedManifest.version}`,
@@ -73,11 +107,6 @@ try {
     throw new Error(`packed manifest contains install lifecycle hooks: ${forbiddenHooks.join(', ')}`);
   }
 
-  const files = [...(packed.files ?? [])]
-    .map((file) => ({ path: file.path, size: file.size, mode: file.mode ?? null }))
-    .sort((a, b) => a.path.localeCompare(b.path));
-
-  const fileCensusCanonical = JSON.stringify(canonical(files));
   const receipt = canonical({
     receipt_version: 'NpmPackageReceiptV1',
     source: {
@@ -87,16 +116,26 @@ try {
     package: {
       name: pkg.name,
       version: pkg.version,
-      filename: packed.filename,
-      packed_size: packed.size,
-      unpacked_size: packed.unpackedSize,
-      file_count: files.length,
-      npm_shasum: packed.shasum ?? null,
-      npm_integrity: packed.integrity ?? null,
-      sha256: digest('sha256', tarBytes),
-      sha512: digest('sha512', tarBytes),
-      file_census_sha256: digest('sha256', Buffer.from(fileCensusCanonical)),
-      files,
+      filename: second.meta.filename,
+      packed_size: second.meta.size,
+      unpacked_size: second.meta.unpackedSize,
+      file_count: second.files.length,
+      npm_shasum: second.meta.shasum ?? null,
+      npm_integrity: second.meta.integrity ?? null,
+      sha256: second.sha256,
+      sha512: second.sha512,
+      file_census_sha256: second.fileCensusSha256,
+      files: second.files,
+    },
+    reproducibility: {
+      independent_pack_count: 2,
+      byte_for_byte_equal: first.sha256 === second.sha256,
+      sha512_equal: first.sha512 === second.sha512,
+      npm_shasum_equal: first.meta.shasum === second.meta.shasum,
+      npm_integrity_equal: first.meta.integrity === second.meta.integrity,
+      file_census_equal: first.fileCensusSha256 === second.fileCensusSha256,
+      first_sha256: first.sha256,
+      second_sha256: second.sha256,
     },
     verification: {
       exact_source_sha_verified: true,
@@ -105,6 +144,7 @@ try {
         : null,
       packed_manifest_identity_verified: true,
       lifecycle_install_hooks_absent: true,
+      reproducible_pack_verified: true,
       local_64_suite_bound: false,
       authority: 'REMOTE_EXACT_SOURCE_PACK_VERIFIED',
     },
@@ -126,6 +166,6 @@ try {
   process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
 } finally {
   if (process.env.KEEP_NPM_TARBALL !== '1') {
-    rmSync(tarball, { force: true });
+    rmSync(second.tarball, { force: true });
   }
 }
