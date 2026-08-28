@@ -20,8 +20,11 @@ jobs:
           test "$(git rev-parse HEAD)" = '${{ github.event.pull_request.head.sha }}'
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: npm
+          node-version: 24
+      - name: Pin current npm verification toolchain
+        run: |
+          npm install --global npm@11.19.0
+          test "$(npm --version)" = "11.19.0"
       - run: npm ci
       - run: npm run build
       - run: node --test tests/*.test.mjs
