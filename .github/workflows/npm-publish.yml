@@ -27,9 +27,12 @@ jobs:
           echo "sha=$head" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: npm
+          node-version: 24
           registry-url: https://registry.npmjs.org/
+      - name: Pin release npm toolchain
+        run: |
+          npm install --global npm@11.19.0
+          test "$(npm --version)" = "11.19.0"
       - run: npm ci
       - run: npm run build
       - run: npm test
@@ -49,15 +52,19 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
-  publish-npm:
+  release-npm:
     needs: verify-package
     runs-on: ubuntu-latest
     environment: npm
     steps:
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           registry-url: https://registry.npmjs.org/
+      - name: Pin release npm toolchain
+        run: |
+          npm install --global npm@11.19.0
+          test "$(npm --version)" = "11.19.0"
       - uses: actions/download-artifact@v4
         with:
           pattern: sovereign-guard-npm-*
@@ -79,7 +86,32 @@ jobs:
           expected="$(node -e "const r=require('./verified-package/artifacts/NpmPackageReceiptV1.json'); process.stdout.write(r.package.sha256)")"
           actual="$(sha256sum "$tgz" | awk '{print $1}')"
           test "$actual" = "$expected"
-      - name: Publish the verified tarball with provenance
+      - name: Resolve explicit release mode
+        id: mode
+        shell: bash
+        env:
+          NPM_RELEASE_MODE: ${{ vars.NPM_RELEASE_MODE }}
+        run: |
+          set -euo pipefail
+          case "$NPM_RELEASE_MODE" in
+            trusted-stage|bootstrap-token)
+              echo "mode=$NPM_RELEASE_MODE" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "NPM_RELEASE_MODE must be explicitly set to trusted-stage or bootstrap-token" >&2
+              exit 1
+              ;;
+          esac
+      - name: Stage verified tarball through npm trusted publishing
+        if: steps.mode.outputs.mode == 'trusted-stage'
+        shell: bash
+        run: npm stage publish '${{ steps.tarball.outputs.path }}' --ignore-scripts
+      - name: Bootstrap first registry publication with explicit token mode
+        if: steps.mode.outputs.mode == 'bootstrap-token'
+        shell: bash
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN || secrets.npm_token }}
-        run: npm publish '${{ steps.tarball.outputs.path }}' --provenance --access public
+        run: |
+          set -euo pipefail
+          test -n "$NODE_AUTH_TOKEN"
+          npm publish '${{ steps.tarball.outputs.path }}' --ignore-scripts --provenance --access public
