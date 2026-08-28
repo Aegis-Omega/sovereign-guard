@@ -1,0 +1,74 @@
+name: NPM Lock Refresh Candidate
+
+on:
+  push:
+    branches: [feat/npm-proof-carrying-release-v1]
+    paths:
+      - '.github/workflows/npm-lock-refresh.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  refresh:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Assert exact candidate
+        shell: bash
+        run: test "$(git rev-parse HEAD)" = '${{ github.sha }}'
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Pin npm
+        run: |
+          npm install --global npm@11.19.0
+          test "$(npm --version)" = '11.19.0'
+
+      - name: Refresh tsx within committed semver range
+        run: npm update tsx --package-lock-only --ignore-scripts
+
+      - name: Install refreshed lock exactly
+        run: npm ci
+
+      - name: Build and test refreshed graph
+        run: |
+          npm run build
+          npm test
+
+      - name: Audit refreshed dependency graph at LOW threshold
+        id: audit
+        continue-on-error: true
+        shell: bash
+        run: npm audit --audit-level=low --json > npm-audit-refresh.json
+
+      - name: Record resolved tsx/esbuild versions
+        shell: bash
+        run: |
+          node -e "const l=require('./package-lock.json'); console.log(JSON.stringify({tsx:l.packages['node_modules/tsx']?.version,esbuild:l.packages['node_modules/esbuild']?.version},null,2))" | tee dependency-versions.json
+
+      - name: Upload lock refresh evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: npm-lock-refresh-${{ github.sha }}
+          path: |
+            package-lock.json
+            npm-audit-refresh.json
+            dependency-versions.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Fail closed if LOW-threshold audit failed
+        if: steps.audit.outcome != 'success'
+        run: exit 1
