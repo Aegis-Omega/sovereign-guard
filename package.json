@@ -24,6 +24,7 @@
     "build": "tsc",
     "test": "node --test tests/*.test.mjs",
     "verify:package": "node scripts/npm-proof-receipt.mjs",
+    "verify:supply-chain": "node scripts/npm-supply-chain-receipt.mjs",
     "prepack": "npm run build",
     "prepublishOnly": "npm run build && npm test && npm run verify:package",
     "dev": "tsx bin/guard.ts",
