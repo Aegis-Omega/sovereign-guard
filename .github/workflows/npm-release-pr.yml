@@ -25,4 +25,7 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: node --test tests/*.test.mjs
-      - run: node scripts/npm-proof-receipt.mjs
+      - name: Generate exact-source npm receipt
+        env:
+          GITHUB_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/npm-proof-receipt.mjs
