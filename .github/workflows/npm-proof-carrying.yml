@@ -11,11 +11,12 @@ permissions:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
       - name: Assert exact candidate SHA
         shell: bash
         run: |
@@ -23,7 +24,7 @@ jobs:
           expected='${{ github.event.pull_request.head.sha || github.sha }}'
           actual="$(git rev-parse HEAD)"
           test "$actual" = "$expected"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24
       - name: Pin current npm verification toolchain
@@ -33,13 +34,13 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm test
-      - name: Generate dependency vulnerability report
+      - name: Generate full-graph dependency vulnerability report
         id: audit
         continue-on-error: true
         shell: bash
         run: |
           mkdir -p artifacts
-          npm audit --omit=dev --audit-level=high --json > artifacts/npm-audit.json
+          npm audit --audit-level=low --json > artifacts/npm-audit.json
       - name: Verify registry signatures and provenance attestations
         id: signatures
         continue-on-error: true
@@ -51,35 +52,37 @@ jobs:
         run: |
           mkdir -p artifacts
           npm sbom --sbom-format=cyclonedx > artifacts/sbom.cdx.json
-      - name: Generate proof-carrying npm receipt
+      - name: Generate proof-carrying npm package receipt
         env:
           AEGIS_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           KEEP_NPM_TARBALL: '1'
-        run: node scripts/npm-proof-receipt.mjs
+        run: npm run verify:package
+      - name: Generate canonical npm supply-chain receipt
+        id: supply
+        continue-on-error: true
+        env:
+          AEGIS_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: npm run verify:supply-chain
       - name: Hash supply-chain evidence
+        if: always()
         shell: bash
         run: |
           set -euo pipefail
-          sha256sum \
-            artifacts/NpmPackageReceiptV1.json \
-            artifacts/npm-audit.json \
-            artifacts/npm-signatures.json \
-            artifacts/sbom.cdx.json \
+          find artifacts -maxdepth 1 -type f ! -name 'supply-chain.sha256' -print0 \
+            | sort -z \
+            | xargs -0 sha256sum \
             > artifacts/supply-chain.sha256
       - name: Upload verified npm package evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: sovereign-guard-npm-evidence-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             sovereign-guard-*.tgz
-            artifacts/NpmPackageReceiptV1.json
-            artifacts/npm-audit.json
-            artifacts/npm-signatures.json
-            artifacts/sbom.cdx.json
-            artifacts/supply-chain.sha256
+            artifacts/*.json
+            artifacts/*.sha256
           if-no-files-found: error
           retention-days: 90
       - name: Fail closed on supply-chain verification debt
-        if: steps.audit.outcome != 'success' || steps.signatures.outcome != 'success'
+        if: steps.audit.outcome != 'success' || steps.signatures.outcome != 'success' || steps.supply.outcome != 'success'
         run: exit 1
