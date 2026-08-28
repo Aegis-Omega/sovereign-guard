@@ -16,11 +16,15 @@ jobs:
         with:
           ref: ${{ github.event.release.tag_name }}
       - name: Assert release tag resolves to checked-out commit
+        id: source
         shell: bash
         run: |
           set -euo pipefail
           tag='${{ github.event.release.tag_name }}'
-          test "$(git rev-parse HEAD)" = "$(git rev-parse "${tag}^{commit}")"
+          head="$(git rev-parse HEAD)"
+          tagged="$(git rev-parse "${tag}^{commit}")"
+          test "$head" = "$tagged"
+          echo "sha=$head" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -31,14 +35,14 @@ jobs:
       - run: npm test
       - name: Produce exact npm tarball and receipt
         env:
-          GITHUB_SHA: ${{ github.sha }}
+          AEGIS_SOURCE_SHA: ${{ steps.source.outputs.sha }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
           KEEP_NPM_TARBALL: '1'
         run: npm run verify:package
       - name: Upload verified npm artifact
         uses: actions/upload-artifact@v4
         with:
-          name: sovereign-guard-npm-${{ github.sha }}
+          name: sovereign-guard-npm-${{ steps.source.outputs.sha }}
           path: |
             sovereign-guard-*.tgz
             artifacts/NpmPackageReceiptV1.json
@@ -56,8 +60,9 @@ jobs:
           registry-url: https://registry.npmjs.org/
       - uses: actions/download-artifact@v4
         with:
-          name: sovereign-guard-npm-${{ github.sha }}
+          pattern: sovereign-guard-npm-*
           path: verified-package
+          merge-multiple: true
       - name: Assert exactly one verified tarball
         id: tarball
         shell: bash
