@@ -7,7 +7,7 @@ on:
       - '.github/workflows/npm-lock-refresh.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   refresh:
@@ -18,7 +18,7 @@ jobs:
         with:
           ref: ${{ github.sha }}
           fetch-depth: 1
-          persist-credentials: false
+          persist-credentials: true
 
       - name: Assert exact candidate
         shell: bash
@@ -47,28 +47,31 @@ jobs:
           npm test
 
       - name: Audit refreshed dependency graph at LOW threshold
-        id: audit
-        continue-on-error: true
-        shell: bash
         run: npm audit --audit-level=low --json > npm-audit-refresh.json
 
-      - name: Record resolved tsx/esbuild versions
+      - name: Assert resolved dependency repair
         shell: bash
         run: |
-          node -e "const l=require('./package-lock.json'); console.log(JSON.stringify({tsx:l.packages['node_modules/tsx']?.version,esbuild:l.packages['node_modules/esbuild']?.version},null,2))" | tee dependency-versions.json
+          node - <<'NODE'
+          const lock = require('./package-lock.json');
+          const tsx = lock.packages['node_modules/tsx']?.version;
+          const esbuild = lock.packages['node_modules/esbuild']?.version;
+          if (tsx !== '4.23.12') throw new Error(`unexpected tsx: ${tsx}`);
+          if (esbuild !== '0.28.2') throw new Error(`unexpected esbuild: ${esbuild}`);
+          const audit = require('./npm-audit-refresh.json');
+          if (audit.metadata?.vulnerabilities?.total !== 0) throw new Error('audit total is not zero');
+          console.log(JSON.stringify({tsx, esbuild, vulnerabilities: audit.metadata.vulnerabilities}, null, 2));
+          NODE
 
-      - name: Upload lock refresh evidence
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: npm-lock-refresh-${{ github.sha }}
-          path: |
-            package-lock.json
-            npm-audit-refresh.json
-            dependency-versions.json
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Fail closed if LOW-threshold audit failed
-        if: steps.audit.outcome != 'success'
-        run: exit 1
+      - name: Commit verified lock and remove one-shot generator
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'AEGIS npm verification'
+          git config user.email '228550385+tarikskalic33@users.noreply.github.com'
+          git add package-lock.json
+          git rm .github/workflows/npm-lock-refresh.yml
+          git diff --cached --check
+          git diff --cached --quiet && { echo 'NO_VERIFIED_LOCK_DELTA' >&2; exit 1; }
+          git commit -m 'fix(npm): refresh lock past esbuild advisory'
+          git push origin HEAD:feat/npm-proof-carrying-release-v1
