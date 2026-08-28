@@ -44,6 +44,10 @@ if (headSha !== sourceSha) {
   throw new Error(`source SHA mismatch: HEAD=${headSha} expected=${sourceSha}`);
 }
 
+if (process.env.RELEASE_TAG && process.env.RELEASE_TAG !== `v${pkg.version}`) {
+  throw new Error(`release tag/version mismatch: tag=${process.env.RELEASE_TAG} package=v${pkg.version}`);
+}
+
 const packRaw = command('npm', ['pack', '--json', '--ignore-scripts']);
 const pack = JSON.parse(packRaw);
 if (!Array.isArray(pack) || pack.length !== 1) {
@@ -60,6 +64,13 @@ try {
     throw new Error(
       `packed manifest identity mismatch: committed=${pkg.name}@${pkg.version} packed=${packedManifest.name}@${packedManifest.version}`,
     );
+  }
+
+  const forbiddenHooks = ['preinstall', 'install', 'postinstall'].filter(
+    (name) => packedManifest.scripts?.[name] !== undefined,
+  );
+  if (forbiddenHooks.length > 0) {
+    throw new Error(`packed manifest contains install lifecycle hooks: ${forbiddenHooks.join(', ')}`);
   }
 
   const files = [...(packed.files ?? [])]
@@ -89,10 +100,11 @@ try {
     },
     verification: {
       exact_source_sha_verified: true,
+      release_tag_matches_package_version: process.env.RELEASE_TAG
+        ? process.env.RELEASE_TAG === `v${pkg.version}`
+        : null,
       packed_manifest_identity_verified: true,
-      lifecycle_install_hooks_absent: ['preinstall', 'install', 'postinstall'].every(
-        (name) => pkg.scripts?.[name] === undefined,
-      ),
+      lifecycle_install_hooks_absent: true,
       local_64_suite_bound: false,
       authority: 'REMOTE_EXACT_SOURCE_PACK_VERIFIED',
     },
@@ -113,5 +125,7 @@ try {
 
   process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
 } finally {
-  rmSync(tarball, { force: true });
+  if (process.env.KEEP_NPM_TARBALL !== '1') {
+    rmSync(tarball, { force: true });
+  }
 }
