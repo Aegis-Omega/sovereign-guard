@@ -34,7 +34,7 @@ function canonical(value) {
   return value;
 }
 
-const sourceSha = process.env.GITHUB_SHA || command('git', ['rev-parse', 'HEAD']);
+const sourceSha = process.env.AEGIS_SOURCE_SHA || command('git', ['rev-parse', 'HEAD']);
 if (!/^[0-9a-f]{40}$/i.test(sourceSha)) {
   throw new Error(`invalid source SHA: ${sourceSha}`);
 }
