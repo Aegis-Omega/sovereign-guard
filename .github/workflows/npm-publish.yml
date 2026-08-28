@@ -10,11 +10,12 @@ permissions:
 
 jobs:
   verify-package:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ github.event.release.tag_name }}
+          persist-credentials: false
       - name: Assert release tag resolves to checked-out commit
         id: source
         shell: bash
@@ -25,7 +26,7 @@ jobs:
           tagged="$(git rev-parse "${tag}^{commit}")"
           test "$head" = "$tagged"
           echo "sha=$head" >> "$GITHUB_OUTPUT"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org/
@@ -36,28 +37,49 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm test
-      - name: Produce exact npm tarball and receipt
+      - name: Generate full-graph dependency vulnerability report
+        run: |
+          mkdir -p artifacts
+          npm audit --audit-level=low --json > artifacts/npm-audit.json
+      - name: Verify registry signatures and provenance attestations
+        run: npm audit signatures --json --include-attestations > artifacts/npm-signatures.json
+      - name: Generate CycloneDX SBOM
+        run: npm sbom --sbom-format=cyclonedx > artifacts/sbom.cdx.json
+      - name: Produce exact npm tarball and package receipt
         env:
           AEGIS_SOURCE_SHA: ${{ steps.source.outputs.sha }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
           KEEP_NPM_TARBALL: '1'
         run: npm run verify:package
+      - name: Produce canonical supply-chain receipt
+        env:
+          AEGIS_SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        run: npm run verify:supply-chain
+      - name: Hash verified release evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          find artifacts -maxdepth 1 -type f ! -name 'supply-chain.sha256' -print0 \
+            | sort -z \
+            | xargs -0 sha256sum \
+            > artifacts/supply-chain.sha256
       - name: Upload verified npm artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: sovereign-guard-npm-${{ steps.source.outputs.sha }}
           path: |
             sovereign-guard-*.tgz
-            artifacts/NpmPackageReceiptV1.json
+            artifacts/*.json
+            artifacts/*.sha256
           if-no-files-found: error
           retention-days: 90
 
   release-npm:
     needs: verify-package
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: npm
     steps:
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org/
@@ -65,7 +87,7 @@ jobs:
         run: |
           npm install --global npm@11.19.0
           test "$(npm --version)" = "11.19.0"
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           pattern: sovereign-guard-npm-*
           path: verified-package
@@ -78,7 +100,7 @@ jobs:
           mapfile -t tgz < <(find verified-package -maxdepth 1 -type f -name 'sovereign-guard-*.tgz' -print)
           test "${#tgz[@]}" -eq 1
           echo "path=${tgz[0]}" >> "$GITHUB_OUTPUT"
-      - name: Reverify tarball digest against receipt
+      - name: Reverify tarball and supply-chain binding
         shell: bash
         run: |
           set -euo pipefail
@@ -86,6 +108,21 @@ jobs:
           expected="$(node -e "const r=require('./verified-package/artifacts/NpmPackageReceiptV1.json'); process.stdout.write(r.package.sha256)")"
           actual="$(sha256sum "$tgz" | awk '{print $1}')"
           test "$actual" = "$expected"
+          node - <<'NODE'
+          const fs = require('fs');
+          const crypto = require('crypto');
+          const root = './verified-package/artifacts';
+          const pkg = JSON.parse(fs.readFileSync(`${root}/NpmPackageReceiptV1.json`, 'utf8'));
+          const supply = JSON.parse(fs.readFileSync(`${root}/NpmSupplyChainReceiptV1.json`, 'utf8'));
+          const pkgFileSha = crypto.createHash('sha256').update(fs.readFileSync(`${root}/NpmPackageReceiptV1.json`)).digest('hex');
+          if (supply.verification?.authority !== 'REMOTE_EXACT_SOURCE_SUPPLY_CHAIN_VERIFIED') throw new Error('supply-chain authority mismatch');
+          if (supply.package_receipt?.receipt_root !== pkg.receipt_sha256) throw new Error('package receipt root mismatch');
+          if (supply.package_receipt?.file_sha256 !== pkgFileSha) throw new Error('package receipt file hash mismatch');
+          if (supply.package_receipt?.tarball_sha256 !== pkg.package.sha256) throw new Error('tarball binding mismatch');
+          if (supply.audit?.vulnerabilities?.total !== 0) throw new Error('non-zero vulnerability snapshot');
+          if (supply.signatures?.missing_count !== 0 || supply.signatures?.invalid_count !== 0) throw new Error('registry signature debt');
+          if (supply.verification?.local_64_suite_bound !== false) throw new Error('64-suite authority laundering');
+          NODE
       - name: Resolve explicit release mode
         id: mode
         shell: bash
