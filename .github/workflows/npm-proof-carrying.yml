@@ -1,0 +1,32 @@
+name: NPM Proof-Carrying Release
+
+on:
+  pull_request:
+  push:
+    branches:
+      - feat/npm-proof-carrying-release-v1
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Assert exact candidate SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected='${{ github.event.pull_request.head.sha || github.sha }}'
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$expected"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Preregistered npm proof-carrying verifier
+        run: node scripts/npm-proof-receipt.mjs
