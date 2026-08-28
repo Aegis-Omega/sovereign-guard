@@ -8,17 +8,18 @@ permissions:
 
 jobs:
   preregistered:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
       - name: Assert exact PR head
         shell: bash
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = '${{ github.event.pull_request.head.sha }}'
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24
       - name: Pin current npm verification toolchain
@@ -28,7 +29,21 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: node --test tests/*.test.mjs
-      - name: Generate exact-source npm receipt
+      - name: Generate full-graph dependency vulnerability report
+        id: audit
+        continue-on-error: true
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          npm audit --audit-level=low --json > artifacts/npm-audit.json
+      - name: Verify registry signatures and provenance attestations
+        id: signatures
+        continue-on-error: true
+        shell: bash
+        run: npm audit signatures --json --include-attestations > artifacts/npm-signatures.json
+      - name: Generate CycloneDX SBOM
+        run: npm sbom --sbom-format=cyclonedx > artifacts/sbom.cdx.json
+      - name: Generate exact-source npm package receipt
         id: receipt
         continue-on-error: true
         env:
@@ -37,17 +52,28 @@ jobs:
         run: |
           set -o pipefail
           node scripts/npm-proof-receipt.mjs >npm-receipt.stdout 2>npm-receipt.stderr
+      - name: Generate canonical supply-chain receipt
+        id: supply
+        continue-on-error: true
+        env:
+          AEGIS_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          set -o pipefail
+          node scripts/npm-supply-chain-receipt.mjs >npm-supply.stdout 2>npm-supply.stderr
       - name: Upload receipt diagnostics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: npm-receipt-diagnostics-${{ github.event.pull_request.head.sha }}
           path: |
             npm-receipt.stdout
             npm-receipt.stderr
-            artifacts/NpmPackageReceiptV1.json
+            npm-supply.stdout
+            npm-supply.stderr
+            artifacts/*.json
           if-no-files-found: warn
           retention-days: 30
-      - name: Fail closed if receipt generation failed
-        if: steps.receipt.outcome != 'success'
+      - name: Fail closed on package or supply-chain debt
+        if: steps.receipt.outcome != 'success' || steps.audit.outcome != 'success' || steps.signatures.outcome != 'success' || steps.supply.outcome != 'success'
         run: exit 1
