@@ -27,11 +27,51 @@ function stable(value) {
   return value;
 }
 
+function canonicalSha256(value) {
+  return sha256(Buffer.from(JSON.stringify(stable(value))));
+}
+
+function normalizeSbom(input) {
+  const sbom = structuredClone(input);
+  delete sbom.serialNumber;
+  if (sbom.metadata) delete sbom.metadata.timestamp;
+  return sbom;
+}
+
+function writeManifest(f) {
+  const names = [
+    'NpmPackageReceiptV1.json',
+    'NpmSupplyChainReceiptV1.json',
+    'npm-audit.json',
+    'npm-signatures.json',
+    'sbom.cdx.json',
+  ];
+  const lines = names.map((name) => {
+    const path = join(f.artifacts, name);
+    return `${sha256(readFileSync(path))}  artifacts/${name}`;
+  });
+  writeFileSync(f.manifestPath, `${lines.join('\n')}\n`);
+}
+
+function refreshSupply(f, mutate = () => {}) {
+  const supply = JSON.parse(readFileSync(f.supplyPath, 'utf8'));
+  mutate(supply);
+  const core = structuredClone(supply);
+  delete core.receipt_sha256;
+  supply.receipt_sha256 = canonicalSha256(core);
+  writeFileSync(f.supplyPath, `${JSON.stringify(supply, null, 2)}\n`);
+  writeManifest(f);
+}
+
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), 'guard-release-preflight-'));
   const evidenceRoot = join(root, 'verified-package');
   const artifacts = join(evidenceRoot, 'artifacts');
   mkdirSync(artifacts, { recursive: true });
+
+  const lock = { name: 'sovereign-guard', version: '1.0.0', lockfileVersion: 3 };
+  const lockPath = join(root, 'package-lock.json');
+  writeFileSync(lockPath, `${JSON.stringify(lock)}\n`);
 
   const tarball = join(evidenceRoot, 'sovereign-guard-1.0.0.tgz');
   writeFileSync(tarball, Buffer.from('deterministic-release-preflight-fixture'));
@@ -71,6 +111,43 @@ function fixture() {
   writeFileSync(pkgPath, `${JSON.stringify(pkgReceipt, null, 2)}\n`);
   const pkgFileSha256 = sha256(readFileSync(pkgPath));
 
+  const audit = {
+    metadata: {
+      vulnerabilities: { info: 0, low: 0, moderate: 0, high: 0, critical: 0, total: 0 },
+      dependencies: { prod: 1, dev: 1, optional: 0, peer: 0, peerOptional: 0, total: 2 },
+    },
+  };
+  const auditPath = join(artifacts, 'npm-audit.json');
+  writeFileSync(auditPath, `${JSON.stringify(audit, null, 2)}\n`);
+
+  const signatures = {
+    invalid: [],
+    missing: [],
+    verified: [
+      {
+        name: 'tsx',
+        version: '4.23.12',
+        attestations: { provenance: { predicateType: 'https://slsa.dev/provenance/v1' } },
+      },
+    ],
+  };
+  const signaturesPath = join(artifacts, 'npm-signatures.json');
+  writeFileSync(signaturesPath, `${JSON.stringify(signatures, null, 2)}\n`);
+
+  const sbom = {
+    bomFormat: 'CycloneDX',
+    specVersion: '1.6',
+    serialNumber: 'urn:uuid:fixture',
+    metadata: {
+      timestamp: '2026-09-23T00:00:00Z',
+      component: { name: 'sovereign-guard', version: '1.0.0' },
+    },
+    components: [],
+    dependencies: [],
+  };
+  const sbomPath = join(artifacts, 'sbom.cdx.json');
+  writeFileSync(sbomPath, `${JSON.stringify(sbom, null, 2)}\n`);
+
   const supplyCore = {
     receipt_version: 'NpmSupplyChainReceiptV1',
     source: {
@@ -95,35 +172,61 @@ function fixture() {
       tarball_sha256: tarballSha256,
       authority: 'REMOTE_EXACT_SOURCE_PACK_VERIFIED',
     },
+    lockfile: {
+      lockfile_version: 3,
+      sha256: sha256(readFileSync(lockPath)),
+    },
     audit: {
-      vulnerabilities: {
-        info: 0,
-        low: 0,
-        moderate: 0,
-        high: 0,
-        critical: 0,
-        total: 0,
-      },
+      vulnerabilities: audit.metadata.vulnerabilities,
+      canonical_sha256: canonicalSha256(audit),
     },
     signatures: {
-      verified_count: 2,
+      verified_count: 1,
       missing_count: 0,
       invalid_count: 0,
-      provenance_attestation_count: 2,
+      provenance_attestation_count: 1,
+      canonical_sha256: canonicalSha256(signatures),
+    },
+    sbom: {
+      format: 'CycloneDX',
+      spec_version: '1.6',
+      normalized_sha256: canonicalSha256(normalizeSbom(sbom)),
     },
     verification: {
       authority: 'REMOTE_EXACT_SOURCE_SUPPLY_CHAIN_VERIFIED',
+      exact_source_sha_verified: true,
+      package_receipt_bound: true,
+      lockfile_bound: true,
+      zero_vulnerability_snapshot_verified: true,
+      registry_signatures_verified: true,
+      provenance_attestations_observed: true,
+      normalized_sbom_bound: true,
       local_64_suite_bound: false,
     },
   };
   const supplyReceipt = {
     ...supplyCore,
-    receipt_sha256: sha256(Buffer.from(JSON.stringify(stable(supplyCore)))),
+    receipt_sha256: canonicalSha256(supplyCore),
   };
   const supplyPath = join(artifacts, 'NpmSupplyChainReceiptV1.json');
   writeFileSync(supplyPath, `${JSON.stringify(supplyReceipt, null, 2)}\n`);
 
-  return { root, evidenceRoot, artifacts, tarball, pkgPath, supplyPath };
+  const manifestPath = join(artifacts, 'supply-chain.sha256');
+  const f = {
+    root,
+    evidenceRoot,
+    artifacts,
+    lockPath,
+    tarball,
+    pkgPath,
+    auditPath,
+    signaturesPath,
+    sbomPath,
+    supplyPath,
+    manifestPath,
+  };
+  writeManifest(f);
+  return f;
 }
 
 function run(f, env = {}) {
@@ -141,12 +244,6 @@ function run(f, env = {}) {
   });
 }
 
-function rewriteJson(path, mutate) {
-  const value = JSON.parse(readFileSync(path, 'utf8'));
-  mutate(value);
-  writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
-}
-
 test('release preflight accepts fully bound release evidence', () => {
   const f = fixture();
   const result = run(f);
@@ -154,56 +251,94 @@ test('release preflight accepts fully bound release evidence', () => {
   const output = JSON.parse(result.stdout);
   assert.equal(output.status, 'RELEASE_PREFLIGHT_VERIFIED');
   assert.equal(output.source_sha, SOURCE_SHA);
-  assert.match(output.tarball_sha256, /^[0-9a-f]{64}$/);
+  assert.equal(output.evidence_manifest_entries, 5);
 });
 
-test('tampered package receipt fails closed', () => {
+test('manifest mismatch fails before receipt admission', () => {
   const f = fixture();
-  rewriteJson(f.pkgPath, (pkg) => {
-    pkg.package.version = '9.9.9';
-  });
+  writeFileSync(f.auditPath, '{}\n');
   const result = run(f);
   assert.notEqual(result.status, 0);
-  assert.match(`${result.stderr}\n${result.stdout}`, /PACKAGE_RECEIPT_ROOT_INVALID/);
+  assert.match(`${result.stderr}\n${result.stdout}`, /EVIDENCE_MANIFEST_DIGEST_MISMATCH/);
 });
 
-test('source mismatch fails closed', () => {
+test('tampered package receipt fails closed even if manifest is refreshed', () => {
   const f = fixture();
-  const result = run(f, { EXPECTED_SOURCE_SHA: 'b'.repeat(40) });
+  const pkg = JSON.parse(readFileSync(f.pkgPath, 'utf8'));
+  pkg.package.version = '9.9.9';
+  writeFileSync(f.pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
+  writeManifest(f);
+  const result = run(f);
   assert.notEqual(result.status, 0);
-  assert.match(`${result.stderr}\n${result.stdout}`, /PACKAGE_RECEIPT_SOURCE_MISMATCH/);
+  assert.match(`${result.stderr}\n${result.stdout}`, /SUPPLY_CHAIN_PACKAGE_IDENTITY_MISMATCH|PACKAGE_RECEIPT_ROOT_INVALID/);
 });
 
-test('workflow run identity mismatch fails closed', () => {
+test('source lockfile mismatch fails closed', () => {
   const f = fixture();
-  const result = run(f, { EXPECTED_RUN_ID: '1' });
+  writeFileSync(f.lockPath, '{"name":"sovereign-guard","version":"9.9.9","lockfileVersion":3}\n');
+  const result = run(f);
   assert.notEqual(result.status, 0);
-  assert.match(`${result.stderr}\n${result.stdout}`, /WORKFLOW_RUN_ID_MISMATCH/);
+  assert.match(`${result.stderr}\n${result.stdout}`, /LOCKFILE_HASH_MISMATCH/);
 });
 
-test('non-zero vulnerability snapshot fails closed', () => {
+test('audit evidence hash mismatch fails closed', () => {
   const f = fixture();
-  rewriteJson(f.supplyPath, (supply) => {
-    supply.audit.vulnerabilities.low = 1;
-    supply.audit.vulnerabilities.total = 1;
-    const root = structuredClone(supply);
-    delete root.receipt_sha256;
-    supply.receipt_sha256 = sha256(Buffer.from(JSON.stringify(stable(root))));
+  const audit = JSON.parse(readFileSync(f.auditPath, 'utf8'));
+  audit.metadata.dependencies.total = 999;
+  writeFileSync(f.auditPath, `${JSON.stringify(audit, null, 2)}\n`);
+  writeManifest(f);
+  const result = run(f);
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stderr}\n${result.stdout}`, /AUDIT_EVIDENCE_HASH_MISMATCH/);
+});
+
+test('non-zero vulnerability snapshot fails closed with internally consistent evidence', () => {
+  const f = fixture();
+  const audit = JSON.parse(readFileSync(f.auditPath, 'utf8'));
+  audit.metadata.vulnerabilities.low = 1;
+  audit.metadata.vulnerabilities.total = 1;
+  writeFileSync(f.auditPath, `${JSON.stringify(audit, null, 2)}\n`);
+  refreshSupply(f, (supply) => {
+    supply.audit.vulnerabilities = audit.metadata.vulnerabilities;
+    supply.audit.canonical_sha256 = canonicalSha256(audit);
   });
   const result = run(f);
   assert.notEqual(result.status, 0);
   assert.match(`${result.stderr}\n${result.stdout}`, /NON_ZERO_VULNERABILITY_SNAPSHOT/);
 });
 
-test('registry signature debt fails closed', () => {
+test('registry signature debt fails closed with internally consistent evidence', () => {
   const f = fixture();
-  rewriteJson(f.supplyPath, (supply) => {
+  const signatures = JSON.parse(readFileSync(f.signaturesPath, 'utf8'));
+  signatures.invalid.push({ name: 'dependency-x', version: '1.0.0' });
+  writeFileSync(f.signaturesPath, `${JSON.stringify(signatures, null, 2)}\n`);
+  refreshSupply(f, (supply) => {
     supply.signatures.invalid_count = 1;
-    const root = structuredClone(supply);
-    delete root.receipt_sha256;
-    supply.receipt_sha256 = sha256(Buffer.from(JSON.stringify(stable(root))));
+    supply.signatures.canonical_sha256 = canonicalSha256(signatures);
   });
   const result = run(f);
   assert.notEqual(result.status, 0);
   assert.match(`${result.stderr}\n${result.stdout}`, /REGISTRY_SIGNATURE_DEBT/);
+});
+
+test('SBOM evidence hash mismatch fails closed', () => {
+  const f = fixture();
+  const sbom = JSON.parse(readFileSync(f.sbomPath, 'utf8'));
+  sbom.components.push({ name: 'unexpected', version: '1.0.0' });
+  writeFileSync(f.sbomPath, `${JSON.stringify(sbom, null, 2)}\n`);
+  writeManifest(f);
+  const result = run(f);
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stderr}\n${result.stdout}`, /SBOM_EVIDENCE_HASH_MISMATCH/);
+});
+
+test('source mismatch and workflow run mismatch fail closed', () => {
+  const f = fixture();
+  const source = run(f, { EXPECTED_SOURCE_SHA: 'b'.repeat(40) });
+  assert.notEqual(source.status, 0);
+  assert.match(`${source.stderr}\n${source.stdout}`, /PACKAGE_RECEIPT_SOURCE_MISMATCH/);
+
+  const runId = run(f, { EXPECTED_RUN_ID: '1' });
+  assert.notEqual(runId.status, 0);
+  assert.match(`${runId.stderr}\n${runId.stdout}`, /WORKFLOW_RUN_ID_MISMATCH/);
 });
