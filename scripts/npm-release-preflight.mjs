@@ -110,6 +110,7 @@ const audit = readJson(auditPath);
 const signatures = readJson(signaturesPath);
 const sbom = readJson(sbomPath);
 const lockBytes = readFileSync(sourceLockPath);
+const lock = JSON.parse(lockBytes);
 const tarballSha256 = sha256Bytes(readFileSync(tarballPath));
 
 if (pkg.receipt_version !== 'NpmPackageReceiptV1') fail('PACKAGE_RECEIPT_VERSION_MISMATCH');
@@ -165,6 +166,23 @@ if (supply.package_receipt?.tarball_sha256 !== pkg.package?.sha256) {
 }
 if (pkg.package?.sha256 !== tarballSha256) fail('TARBALL_HASH_MISMATCH');
 
+if (lock.lockfileVersion !== 3) {
+  fail('LOCKFILE_VERSION_MISMATCH', `actual=${lock.lockfileVersion}`);
+}
+if (lock.name !== pkg.package?.name || lock.version !== pkg.package?.version) {
+  fail('LOCK_PACKAGE_IDENTITY_MISMATCH');
+}
+const lockRoot = lock.packages?.[''];
+if (
+  !lockRoot ||
+  lockRoot.name !== pkg.package?.name ||
+  lockRoot.version !== pkg.package?.version
+) {
+  fail('LOCK_ROOT_PACKAGE_IDENTITY_MISMATCH');
+}
+if (supply.lockfile?.lockfile_version !== lock.lockfileVersion) {
+  fail('LOCKFILE_VERSION_RECEIPT_MISMATCH');
+}
 if (supply.lockfile?.sha256 !== sha256Bytes(lockBytes)) fail('LOCKFILE_HASH_MISMATCH');
 if (supply.audit?.canonical_sha256 !== canonicalSha256(audit)) fail('AUDIT_EVIDENCE_HASH_MISMATCH');
 if (supply.signatures?.canonical_sha256 !== canonicalSha256(signatures)) {

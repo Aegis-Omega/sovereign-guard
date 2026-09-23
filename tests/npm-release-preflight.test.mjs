@@ -69,7 +69,17 @@ function fixture() {
   const artifacts = join(evidenceRoot, 'artifacts');
   mkdirSync(artifacts, { recursive: true });
 
-  const lock = { name: 'sovereign-guard', version: '1.0.0', lockfileVersion: 3 };
+  const lock = {
+    name: 'sovereign-guard',
+    version: '1.0.0',
+    lockfileVersion: 3,
+    packages: {
+      '': {
+        name: 'sovereign-guard',
+        version: '1.0.0',
+      },
+    },
+  };
   const lockPath = join(root, 'package-lock.json');
   writeFileSync(lockPath, `${JSON.stringify(lock)}\n`);
 
@@ -271,6 +281,29 @@ test('tampered package receipt fails closed even if manifest is refreshed', () =
   const result = run(f);
   assert.notEqual(result.status, 0);
   assert.match(`${result.stderr}\n${result.stdout}`, /SUPPLY_CHAIN_PACKAGE_IDENTITY_MISMATCH|PACKAGE_RECEIPT_ROOT_INVALID/);
+});
+
+test('lockfile root package identity mismatch fails closed before hash admission', () => {
+  const f = fixture();
+  const lock = JSON.parse(readFileSync(f.lockPath, 'utf8'));
+  lock.packages[''].version = '9.9.9';
+  writeFileSync(f.lockPath, `${JSON.stringify(lock)}\n`);
+  const result = run(f);
+  assert.notEqual(result.status, 0);
+  assert.match(
+    `${result.stderr}\n${result.stdout}`,
+    /LOCK_ROOT_PACKAGE_IDENTITY_MISMATCH/,
+  );
+});
+
+test('unexpected lockfile version fails closed', () => {
+  const f = fixture();
+  const lock = JSON.parse(readFileSync(f.lockPath, 'utf8'));
+  lock.lockfileVersion = 2;
+  writeFileSync(f.lockPath, `${JSON.stringify(lock)}\n`);
+  const result = run(f);
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stderr}\n${result.stdout}`, /LOCKFILE_VERSION_MISMATCH/);
 });
 
 test('source lockfile mismatch fails closed', () => {

@@ -37,7 +37,20 @@ function fixture({
   const artifacts = join(root, 'artifacts');
   mkdirSync(artifacts, { recursive: true });
 
-  writeFileSync(join(root, 'package-lock.json'), JSON.stringify({ name: 'sovereign-guard', version: '1.0.0', lockfileVersion: 3 }) + '\n');
+  writeFileSync(
+    join(root, 'package-lock.json'),
+    JSON.stringify({
+      name: 'sovereign-guard',
+      version: '1.0.0',
+      lockfileVersion: 3,
+      packages: {
+        '': {
+          name: 'sovereign-guard',
+          version: '1.0.0',
+        },
+      },
+    }) + '\n',
+  );
   const packageCore = stable({
     receipt_version: 'NpmPackageReceiptV1',
     source: { repository: 'Aegis-Omega/sovereign-guard', git_sha: SOURCE_SHA },
@@ -162,6 +175,31 @@ test('CycloneDX timestamp and serial number cannot perturb normalized supply-cha
   const b = JSON.parse(readFileSync(join(second, 'artifacts', 'NpmSupplyChainReceiptV1.json'), 'utf8'));
   assert.equal(a.sbom.normalized_sha256, b.sbom.normalized_sha256);
   assert.equal(a.receipt_sha256, b.receipt_sha256);
+});
+
+test('lockfile root package identity mismatch fails closed', () => {
+  const root = fixture();
+  const path = join(root, 'package-lock.json');
+  const lock = JSON.parse(readFileSync(path, 'utf8'));
+  lock.packages[''].version = '9.9.9';
+  writeFileSync(path, `${JSON.stringify(lock)}\n`);
+  const result = run(root);
+  assert.notEqual(result.status, 0);
+  assert.match(
+    `${result.stderr}\n${result.stdout}`,
+    /LOCK_ROOT_PACKAGE_IDENTITY_MISMATCH/,
+  );
+});
+
+test('unexpected lockfile version fails closed', () => {
+  const root = fixture();
+  const path = join(root, 'package-lock.json');
+  const lock = JSON.parse(readFileSync(path, 'utf8'));
+  lock.lockfileVersion = 2;
+  writeFileSync(path, `${JSON.stringify(lock)}\n`);
+  const result = run(root);
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stderr}\n${result.stdout}`, /LOCKFILE_VERSION_MISMATCH/);
 });
 
 test('tampered package receipt root fails closed before supply authority is emitted', () => {

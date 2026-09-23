@@ -125,8 +125,19 @@ if (expectedSource !== packageReceipt.source.git_sha) {
   fail('SOURCE_SHA_MISMATCH', `expected=${expectedSource} actual=${packageReceipt.source.git_sha}`);
 }
 
+if (lock.lockfileVersion !== 3) {
+  fail('LOCKFILE_VERSION_MISMATCH', `actual=${lock.lockfileVersion}`);
+}
 if (lock.name !== packageReceipt.package?.name || lock.version !== packageReceipt.package?.version) {
   fail('LOCK_PACKAGE_IDENTITY_MISMATCH');
+}
+const lockRoot = lock.packages?.[''];
+if (
+  !lockRoot ||
+  lockRoot.name !== packageReceipt.package?.name ||
+  lockRoot.version !== packageReceipt.package?.version
+) {
+  fail('LOCK_ROOT_PACKAGE_IDENTITY_MISMATCH');
 }
 
 const vulnerabilities = audit.metadata?.vulnerabilities;
