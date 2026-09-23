@@ -47,6 +47,7 @@ test('release artifact is bound to producer run and attempt', () => {
     workflow,
     /artifact-ids: \$\{\{ needs\.verify-package\.outputs\.artifact_id \}\}/,
   );
+  assert.match(workflow, /digest-mismatch: error/);
   assert.doesNotMatch(workflow, /pattern: sovereign-guard-npm-\*/);
   assert.doesNotMatch(workflow, /name: \$\{\{ needs\.verify-package\.outputs\.artifact_name \}\}/);
   assert.match(workflow, /ARTIFACT_ID: \$\{\{ needs\.verify-package\.outputs\.artifact_id \}\}/);

@@ -143,6 +143,7 @@ jobs:
           artifact-ids: ${{ needs.verify-package.outputs.artifact_id }}
           path: verified-package
           merge-multiple: true
+          digest-mismatch: error
       - name: Assert exactly one verified tarball
         id: tarball
         shell: bash
