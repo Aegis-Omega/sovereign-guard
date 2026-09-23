@@ -96,6 +96,15 @@ jobs:
       contents: read
       id-token: write
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          persist-credentials: false
+      - name: Reassert release checkout source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = '${{ needs.verify-package.outputs.source_sha }}'
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24
@@ -119,72 +128,14 @@ jobs:
           echo "path=${tgz[0]}" >> "$GITHUB_OUTPUT"
       - name: Reverify receipt roots, exact release source, and tarball binding
         env:
+          VERIFIED_PACKAGE_ROOT: verified-package
           EXPECTED_SOURCE_SHA: ${{ needs.verify-package.outputs.source_sha }}
           EXPECTED_RUN_ID: ${{ github.run_id }}
           EXPECTED_RUN_ATTEMPT: ${{ github.run_attempt }}
         shell: bash
         run: |
           set -euo pipefail
-          tgz='${{ steps.tarball.outputs.path }}'
-          expected="$(node -e "const r=require('./verified-package/artifacts/NpmPackageReceiptV1.json'); process.stdout.write(r.package.sha256)")"
-          actual="$(sha256sum "$tgz" | awk '{print $1}')"
-          test "$actual" = "$expected"
-          node - <<'NODE'
-          const fs = require('fs');
-          const crypto = require('crypto');
-
-          const root = './verified-package/artifacts';
-          const pkgPath = `${root}/NpmPackageReceiptV1.json`;
-          const supplyPath = `${root}/NpmSupplyChainReceiptV1.json`;
-          const pkgBytes = fs.readFileSync(pkgPath);
-          const pkg = JSON.parse(pkgBytes);
-          const supply = JSON.parse(fs.readFileSync(supplyPath, 'utf8'));
-
-          function stable(value) {
-            if (Array.isArray(value)) return value.map(stable);
-            if (value && typeof value === 'object') {
-              return Object.fromEntries(
-                Object.keys(value).sort().map((key) => [key, stable(value[key])]),
-              );
-            }
-            return value;
-          }
-
-          function sha256(value) {
-            return crypto.createHash('sha256').update(value).digest('hex');
-          }
-
-          const expectedSource = process.env.EXPECTED_SOURCE_SHA;
-          if (!/^[0-9a-f]{40}$/i.test(expectedSource ?? '')) throw new Error('expected source SHA missing');
-          if (pkg.source?.git_sha !== expectedSource) throw new Error('package receipt source mismatch');
-          if (supply.source?.git_sha !== expectedSource) throw new Error('supply-chain receipt source mismatch');
-
-          const pkgCore = structuredClone(pkg);
-          const pkgRoot = pkgCore.receipt_sha256;
-          delete pkgCore.receipt_sha256;
-          const recomputedPkgRoot = sha256(Buffer.from(`${JSON.stringify(stable(pkgCore), null, 2)}\n`));
-          if (pkgRoot !== recomputedPkgRoot) throw new Error('package receipt root invalid');
-
-          const supplyCore = structuredClone(supply);
-          const supplyRoot = supplyCore.receipt_sha256;
-          delete supplyCore.receipt_sha256;
-          const recomputedSupplyRoot = sha256(Buffer.from(JSON.stringify(stable(supplyCore))));
-          if (supplyRoot !== recomputedSupplyRoot) throw new Error('supply-chain receipt root invalid');
-
-          const pkgFileSha = sha256(pkgBytes);
-          if (supply.verification?.authority !== 'REMOTE_EXACT_SOURCE_SUPPLY_CHAIN_VERIFIED') throw new Error('supply-chain authority mismatch');
-          if (supply.package_receipt?.receipt_root !== pkg.receipt_sha256) throw new Error('package receipt root mismatch');
-          if (supply.package_receipt?.file_sha256 !== pkgFileSha) throw new Error('package receipt file hash mismatch');
-          if (supply.package_receipt?.tarball_sha256 !== pkg.package.sha256) throw new Error('tarball binding mismatch');
-          if (supply.audit?.vulnerabilities?.total !== 0) throw new Error('non-zero vulnerability snapshot');
-          if (supply.signatures?.missing_count !== 0 || supply.signatures?.invalid_count !== 0) throw new Error('registry signature debt');
-          if (supply.verification?.local_64_suite_bound !== false) throw new Error('64-suite authority laundering');
-
-          if (String(supply.observation?.run_id) !== process.env.EXPECTED_RUN_ID) throw new Error('workflow run identity mismatch');
-          if (String(supply.observation?.run_attempt) !== process.env.EXPECTED_RUN_ATTEMPT) throw new Error('workflow run attempt mismatch');
-          if (supply.observation?.provider !== 'github-actions') throw new Error('workflow observation provider mismatch');
-          if (supply.observation?.event_name !== 'release') throw new Error('workflow observation event mismatch');
-          NODE
+          node scripts/npm-release-preflight.mjs '${{ steps.tarball.outputs.path }}'
       - name: Resolve explicit release mode
         id: mode
         shell: bash
