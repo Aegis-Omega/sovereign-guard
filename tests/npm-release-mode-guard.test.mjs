@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { evaluateReleaseMode } from '../scripts/npm-release-mode-guard.mjs';
+import {
+  evaluateRegistryMetadata,
+  evaluateReleaseMode,
+} from '../scripts/npm-release-mode-guard.mjs';
 
 test('trusted-stage requires an existing registry package', () => {
   assert.deepEqual(
@@ -59,5 +62,46 @@ test('unknown version state fails closed', () => {
   assert.throws(
     () => evaluateReleaseMode('trusted-stage', 'PACKAGE_PRESENT', 'UNKNOWN'),
     /VERSION_STATE_INVALID/,
+  );
+});
+
+
+test('registry metadata must expose a valid versions map', () => {
+  assert.throws(
+    () => evaluateRegistryMetadata('sovereign-guard', '1.0.0', {
+      name: 'sovereign-guard',
+    }),
+    /NPM_REGISTRY_VERSIONS_INVALID/,
+  );
+  assert.throws(
+    () => evaluateRegistryMetadata('sovereign-guard', '1.0.0', {
+      name: 'sovereign-guard',
+      versions: [],
+    }),
+    /NPM_REGISTRY_VERSIONS_INVALID/,
+  );
+});
+
+test('registry metadata binds exact package identity and target version state', () => {
+  assert.deepEqual(
+    evaluateRegistryMetadata('sovereign-guard', '1.0.0', {
+      name: 'sovereign-guard',
+      versions: { '0.9.0': {} },
+    }),
+    { registryState: 'PACKAGE_PRESENT', versionState: 'VERSION_ABSENT' },
+  );
+  assert.deepEqual(
+    evaluateRegistryMetadata('sovereign-guard', '1.0.0', {
+      name: 'sovereign-guard',
+      versions: { '1.0.0': {} },
+    }),
+    { registryState: 'PACKAGE_PRESENT', versionState: 'VERSION_PRESENT' },
+  );
+  assert.throws(
+    () => evaluateRegistryMetadata('sovereign-guard', '1.0.0', {
+      name: 'different-package',
+      versions: {},
+    }),
+    /NPM_REGISTRY_PACKAGE_IDENTITY_MISMATCH/,
   );
 });

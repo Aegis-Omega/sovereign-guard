@@ -25,6 +25,24 @@ export function evaluateReleaseMode(mode, registryState, versionState) {
   return { mode, registry_state: registryState, version_state: versionState };
 }
 
+export function evaluateRegistryMetadata(packageName, packageVersion, metadata) {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    throw new Error('NPM_REGISTRY_METADATA_INVALID');
+  }
+  if (metadata.name !== packageName) {
+    throw new Error(
+      `NPM_REGISTRY_PACKAGE_IDENTITY_MISMATCH expected=${packageName} actual=${metadata?.name ?? '<missing>'}`,
+    );
+  }
+  if (!metadata.versions || typeof metadata.versions !== 'object' || Array.isArray(metadata.versions)) {
+    throw new Error('NPM_REGISTRY_VERSIONS_INVALID');
+  }
+  const versionState = Object.hasOwn(metadata.versions, packageVersion)
+    ? 'VERSION_PRESENT'
+    : 'VERSION_ABSENT';
+  return { registryState: 'PACKAGE_PRESENT', versionState };
+}
+
 async function observeRegistryState(packageName, packageVersion) {
   const url = `https://registry.npmjs.org/${encodeURIComponent(packageName)}`;
   let response;
@@ -50,16 +68,7 @@ async function observeRegistryState(packageName, packageVersion) {
   } catch {
     throw new Error('NPM_REGISTRY_METADATA_INVALID');
   }
-  if (metadata?.name !== packageName) {
-    throw new Error(
-      `NPM_REGISTRY_PACKAGE_IDENTITY_MISMATCH expected=${packageName} actual=${metadata?.name ?? '<missing>'}`,
-    );
-  }
-  const versionState =
-    metadata?.versions && Object.hasOwn(metadata.versions, packageVersion)
-      ? 'VERSION_PRESENT'
-      : 'VERSION_ABSENT';
-  return { registryState: 'PACKAGE_PRESENT', versionState };
+  return evaluateRegistryMetadata(packageName, packageVersion, metadata);
 }
 
 async function main() {
