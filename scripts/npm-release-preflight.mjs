@@ -114,6 +114,18 @@ const lock = JSON.parse(lockBytes);
 const tarballSha256 = sha256Bytes(readFileSync(tarballPath));
 
 if (pkg.receipt_version !== 'NpmPackageReceiptV1') fail('PACKAGE_RECEIPT_VERSION_MISMATCH');
+if (supply.receipt_version !== 'NpmSupplyChainReceiptV1') {
+  fail('SUPPLY_CHAIN_RECEIPT_VERSION_MISMATCH');
+}
+if (pkg.source?.repository !== 'Aegis-Omega/sovereign-guard') {
+  fail('PACKAGE_RECEIPT_REPOSITORY_MISMATCH');
+}
+if (supply.source?.repository !== 'Aegis-Omega/sovereign-guard') {
+  fail('SUPPLY_CHAIN_RECEIPT_REPOSITORY_MISMATCH');
+}
+if (supply.source?.repository !== pkg.source?.repository) {
+  fail('REPOSITORY_BINDING_MISMATCH');
+}
 if (pkg.verification?.authority !== 'REMOTE_EXACT_SOURCE_PACK_VERIFIED') fail('PACKAGE_RECEIPT_AUTHORITY_INSUFFICIENT');
 if (pkg.verification?.exact_source_sha_verified !== true) fail('PACKAGE_RECEIPT_SOURCE_UNVERIFIED');
 if (pkg.verification?.reproducible_pack_verified !== true) fail('PACKAGE_RECEIPT_PACK_UNREPRODUCIBLE');

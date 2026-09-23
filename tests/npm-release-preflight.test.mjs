@@ -383,6 +383,49 @@ test('SBOM evidence hash mismatch fails closed', () => {
   assert.match(`${result.stderr}\n${result.stdout}`, /SBOM_EVIDENCE_HASH_MISMATCH/);
 });
 
+test('repository identity mismatch fails closed even with recomputed receipt roots', () => {
+  const f = fixture();
+
+  const pkg = JSON.parse(readFileSync(f.pkgPath, 'utf8'));
+  pkg.source.repository = 'Other-Org/other-repo';
+  const pkgCore = structuredClone(pkg);
+  delete pkgCore.receipt_sha256;
+  pkg.receipt_sha256 = sha256(
+    Buffer.from(`${JSON.stringify(stable(pkgCore), null, 2)}\n`),
+  );
+  writeFileSync(f.pkgPath, `${JSON.stringify(stable(pkg), null, 2)}\n`);
+
+  const supply = JSON.parse(readFileSync(f.supplyPath, 'utf8'));
+  supply.source.repository = 'Other-Org/other-repo';
+  supply.package_receipt.receipt_root = pkg.receipt_sha256;
+  supply.package_receipt.file_sha256 = sha256(readFileSync(f.pkgPath));
+  const supplyCore = structuredClone(supply);
+  delete supplyCore.receipt_sha256;
+  supply.receipt_sha256 = canonicalSha256(supplyCore);
+  writeFileSync(f.supplyPath, `${JSON.stringify(supply, null, 2)}\n`);
+  writeManifest(f);
+
+  const result = run(f);
+  assert.notEqual(result.status, 0);
+  assert.match(
+    `${result.stderr}\n${result.stdout}`,
+    /PACKAGE_RECEIPT_REPOSITORY_MISMATCH|SUPPLY_CHAIN_RECEIPT_REPOSITORY_MISMATCH/,
+  );
+});
+
+test('unexpected supply-chain receipt version fails closed', () => {
+  const f = fixture();
+  refreshSupply(f, (supply) => {
+    supply.receipt_version = 'NpmSupplyChainReceiptV0';
+  });
+  const result = run(f);
+  assert.notEqual(result.status, 0);
+  assert.match(
+    `${result.stderr}\n${result.stdout}`,
+    /SUPPLY_CHAIN_RECEIPT_VERSION_MISMATCH/,
+  );
+});
+
 test('source mismatch and workflow run mismatch fail closed', () => {
   const f = fixture();
   const source = run(f, { EXPECTED_SOURCE_SHA: 'b'.repeat(40) });
