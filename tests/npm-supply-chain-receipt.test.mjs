@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -7,6 +8,22 @@ import { spawnSync } from 'node:child_process';
 
 const SCRIPT = new URL('../scripts/npm-supply-chain-receipt.mjs', import.meta.url);
 const SOURCE_SHA = 'a'.repeat(40);
+
+function stable(value) {
+  if (Array.isArray(value)) return value.map(stable);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, stable(value[key])]),
+    );
+  }
+  return value;
+}
+
+function sha256(value) {
+  return createHash('sha256').update(value).digest('hex');
+}
 
 function fixture({
   low = 0,
@@ -21,7 +38,7 @@ function fixture({
   mkdirSync(artifacts, { recursive: true });
 
   writeFileSync(join(root, 'package-lock.json'), JSON.stringify({ name: 'sovereign-guard', version: '1.0.0', lockfileVersion: 3 }) + '\n');
-  writeFileSync(join(artifacts, 'NpmPackageReceiptV1.json'), JSON.stringify({
+  const packageCore = stable({
     receipt_version: 'NpmPackageReceiptV1',
     source: { repository: 'Aegis-Omega/sovereign-guard', git_sha: SOURCE_SHA },
     package: { name: 'sovereign-guard', version: '1.0.0', sha256: 'b'.repeat(64) },
@@ -31,8 +48,15 @@ function fixture({
       reproducible_pack_verified: true,
       local_64_suite_bound: false,
     },
-    receipt_sha256: 'c'.repeat(64),
-  }, null, 2) + '\n');
+  });
+  const packageReceipt = stable({
+    ...packageCore,
+    receipt_sha256: sha256(Buffer.from(`${JSON.stringify(packageCore, null, 2)}\n`)),
+  });
+  writeFileSync(
+    join(artifacts, 'NpmPackageReceiptV1.json'),
+    `${JSON.stringify(packageReceipt, null, 2)}\n`,
+  );
 
   const total = totalOverride ?? low;
   writeFileSync(join(artifacts, 'npm-audit.json'), JSON.stringify({
@@ -111,7 +135,7 @@ test('supply-chain receipt binds exact source, package receipt, lock, audit, sig
   assert.equal(receipt.observation.run_number, 48);
   assert.equal(receipt.observation.workflow, 'NPM Proof-Carrying Release');
   assert.equal(receipt.observation.event_name, 'pull_request');
-  assert.equal(receipt.package_receipt.receipt_root, 'c'.repeat(64));
+  assert.match(receipt.package_receipt.receipt_root, /^[0-9a-f]{64}$/);
   assert.equal(receipt.package_receipt.tarball_sha256, 'b'.repeat(64));
   assert.equal(receipt.audit.policy_threshold, 'low');
   assert.equal(receipt.audit.vulnerabilities.total, 0);
@@ -138,6 +162,17 @@ test('CycloneDX timestamp and serial number cannot perturb normalized supply-cha
   const b = JSON.parse(readFileSync(join(second, 'artifacts', 'NpmSupplyChainReceiptV1.json'), 'utf8'));
   assert.equal(a.sbom.normalized_sha256, b.sbom.normalized_sha256);
   assert.equal(a.receipt_sha256, b.receipt_sha256);
+});
+
+test('tampered package receipt root fails closed before supply authority is emitted', () => {
+  const root = fixture();
+  const path = join(root, 'artifacts', 'NpmPackageReceiptV1.json');
+  const receipt = JSON.parse(readFileSync(path, 'utf8'));
+  receipt.receipt_sha256 = '0'.repeat(64);
+  writeFileSync(path, `${JSON.stringify(receipt, null, 2)}\n`);
+  const result = run(root);
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stderr}\n${result.stdout}`, /PACKAGE_RECEIPT_ROOT_INVALID/);
 });
 
 test('one LOW vulnerability fails closed', () => {

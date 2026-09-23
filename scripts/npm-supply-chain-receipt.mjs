@@ -41,6 +41,16 @@ function fileSha256(path) {
   return sha256Bytes(readFileSync(path));
 }
 
+function packageReceiptRoot(receipt) {
+  const core = structuredClone(receipt);
+  const claimed = core.receipt_sha256;
+  delete core.receipt_sha256;
+  const recomputed = sha256Bytes(
+    Buffer.from(`${JSON.stringify(stable(core), null, 2)}\n`),
+  );
+  return { claimed, recomputed };
+}
+
 function requiredEnv(name) {
   const value = (process.env[name] ?? '').trim();
   if (!value) fail('OBSERVATION_ENV_MISSING', `name=${name}`);
@@ -98,6 +108,17 @@ if (packageReceipt.verification?.authority !== 'REMOTE_EXACT_SOURCE_PACK_VERIFIE
 if (packageReceipt.verification?.exact_source_sha_verified !== true) fail('PACKAGE_RECEIPT_SOURCE_UNVERIFIED');
 if (packageReceipt.verification?.reproducible_pack_verified !== true) fail('PACKAGE_RECEIPT_PACK_UNREPRODUCIBLE');
 if (packageReceipt.verification?.local_64_suite_bound !== false) fail('LOCAL_64_SUITE_AUTHORITY_LAUNDERING');
+
+const packageRoot = packageReceiptRoot(packageReceipt);
+if (!/^[0-9a-f]{64}$/.test(packageRoot.claimed ?? '')) {
+  fail('PACKAGE_RECEIPT_ROOT_INVALID');
+}
+if (packageRoot.claimed !== packageRoot.recomputed) {
+  fail(
+    'PACKAGE_RECEIPT_ROOT_INVALID',
+    `claimed=${packageRoot.claimed} recomputed=${packageRoot.recomputed}`,
+  );
+}
 
 const expectedSource = process.env.AEGIS_SOURCE_SHA || packageReceipt.source.git_sha;
 if (expectedSource !== packageReceipt.source.git_sha) {
