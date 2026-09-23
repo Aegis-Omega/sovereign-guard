@@ -181,6 +181,43 @@ try {
     throw new Error('packed package.json does not canonically equal committed package.json');
   }
 
+  const expectedBins = {
+    sovereign-guard: './dist/bin/guard.js',
+    guard: './dist/bin/guard.js',
+  };
+  if (packedManifest.main !== './dist/src/index.js') {
+    throw new Error(`unexpected package main entrypoint: ${packedManifest.main}`);
+  }
+  if (packedManifest.types !== './dist/src/index.d.ts') {
+    throw new Error(`unexpected package types entrypoint: ${packedManifest.types}`);
+  }
+  if (JSON.stringify(canonical(packedManifest.bin ?? {})) !== JSON.stringify(canonical(expectedBins))) {
+    throw new Error('unexpected package bin surface');
+  }
+  if (
+    !Array.isArray(packedManifest.files) ||
+    JSON.stringify(packedManifest.files) !== JSON.stringify(['dist/**', 'README.md'])
+  ) {
+    throw new Error('unexpected package files allowlist');
+  }
+  if (
+    packedManifest.publishConfig?.access !== 'public' ||
+    packedManifest.publishConfig?.provenance !== true
+  ) {
+    throw new Error('unexpected publishConfig contract');
+  }
+
+  const requiredPackedPaths = [
+    'dist/src/index.js',
+    'dist/src/index.d.ts',
+    'dist/bin/guard.js',
+  ];
+  for (const path of requiredPackedPaths) {
+    if (!second.tarPaths.includes(path)) {
+      throw new Error(`required packed entrypoint missing from tarball: ${path}`);
+    }
+  }
+
   const forbiddenHooks = ['preinstall', 'install', 'postinstall'].filter(
     (name) => packedManifest.scripts?.[name] !== undefined,
   );
@@ -214,6 +251,9 @@ try {
       tar_permissions_safe: true,
       publish_path_allowlist_verified: true,
       packed_manifest_canonical_equal: true,
+      public_entrypoints_verified: true,
+      publish_config_verified: true,
+      required_entrypoints_present_in_tar: true,
       tar_census_matches_npm_metadata: true,
       files: second.files,
     },
@@ -235,6 +275,9 @@ try {
         : null,
       packed_manifest_identity_verified: true,
       packed_manifest_canonical_equal: true,
+      public_entrypoints_verified: true,
+      publish_config_verified: true,
+      required_entrypoints_present_in_tar: true,
       canonical_filename_verified: true,
       tar_census_independently_verified: true,
       tar_paths_safe: true,

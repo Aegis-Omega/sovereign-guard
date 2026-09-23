@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -65,6 +65,25 @@ test('packed artifact installs and both declared CLI bins execute', () => {
     const guardBin = join(sandbox, 'node_modules', '.bin', `guard${suffix}`);
     assert.equal(command(sovereignBin, ['--version'], sandbox), pkg.version);
     assert.equal(command(guardBin, ['--version'], sandbox), pkg.version);
+
+    const installedRoot = join(sandbox, 'node_modules', 'sovereign-guard');
+    assert.ok(existsSync(join(installedRoot, 'dist', 'src', 'index.js')));
+    assert.ok(existsSync(join(installedRoot, 'dist', 'src', 'index.d.ts')));
+    const apiProbe = command(
+      process.execPath,
+      [
+        '-e',
+        [
+          "const api=require('sovereign-guard');",
+          "for (const key of ['runScan','generatePatch','generateSeal','loadConfig']) {",
+          "  if (typeof api[key] !== 'function') throw new Error('missing public API '+key);",
+          "}",
+          "process.stdout.write('PUBLIC_API_OK');",
+        ].join(''),
+      ],
+      sandbox,
+    );
+    assert.equal(apiProbe, 'PUBLIC_API_OK');
   } finally {
     rmSync(recreatedPath, { force: true });
     rmSync(sandbox, { recursive: true, force: true });

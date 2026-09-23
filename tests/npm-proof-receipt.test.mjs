@@ -35,6 +35,9 @@ test('package receipt independently binds npm metadata census to actual tar cont
   assert.equal(receipt.package.tar_permissions_safe, true);
   assert.equal(receipt.package.publish_path_allowlist_verified, true);
   assert.equal(receipt.package.packed_manifest_canonical_equal, true);
+  assert.equal(receipt.package.public_entrypoints_verified, true);
+  assert.equal(receipt.package.publish_config_verified, true);
+  assert.equal(receipt.package.required_entrypoints_present_in_tar, true);
   assert.equal(receipt.verification.canonical_filename_verified, true);
   assert.equal(receipt.verification.tar_census_independently_verified, true);
   assert.equal(receipt.verification.tar_paths_safe, true);
@@ -42,6 +45,9 @@ test('package receipt independently binds npm metadata census to actual tar cont
   assert.equal(receipt.verification.tar_permissions_safe, true);
   assert.equal(receipt.verification.publish_path_allowlist_verified, true);
   assert.equal(receipt.verification.packed_manifest_canonical_equal, true);
+  assert.equal(receipt.verification.public_entrypoints_verified, true);
+  assert.equal(receipt.verification.publish_config_verified, true);
+  assert.equal(receipt.verification.required_entrypoints_present_in_tar, true);
   assert.equal(receipt.reproducibility.tar_file_census_equal, true);
   assert.match(receipt.package.tar_file_census_sha256, /^[0-9a-f]{64}$/);
 });
