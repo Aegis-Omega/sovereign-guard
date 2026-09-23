@@ -31,9 +31,13 @@ test('package receipt independently binds npm metadata census to actual tar cont
   assert.equal(receipt.package.tar_file_count, receipt.package.file_count);
   assert.equal(receipt.package.tar_census_matches_npm_metadata, true);
   assert.equal(receipt.package.tar_paths_safe, true);
+  assert.equal(receipt.package.tar_regular_files_only, true);
+  assert.equal(receipt.package.publish_path_allowlist_verified, true);
   assert.equal(receipt.verification.canonical_filename_verified, true);
   assert.equal(receipt.verification.tar_census_independently_verified, true);
   assert.equal(receipt.verification.tar_paths_safe, true);
+  assert.equal(receipt.verification.tar_regular_files_only, true);
+  assert.equal(receipt.verification.publish_path_allowlist_verified, true);
   assert.equal(receipt.reproducibility.tar_file_census_equal, true);
   assert.match(receipt.package.tar_file_census_sha256, /^[0-9a-f]{64}$/);
 });

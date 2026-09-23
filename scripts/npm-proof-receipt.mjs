@@ -57,6 +57,29 @@ function tarFileCensus(tarball) {
     paths.push(path);
   }
   paths.sort((a, b) => a.localeCompare(b));
+
+  const verboseLines = command('tar', ['-tvf', tarball]).split(/\r?\n/).filter(Boolean);
+  if (verboseLines.length !== lines.length) {
+    throw new Error(
+      `tar listing count mismatch: names=${lines.length} verbose=${verboseLines.length}`,
+    );
+  }
+  for (const line of verboseLines) {
+    if (!line.startsWith('-')) {
+      throw new Error(`non-regular tar entry rejected: ${line}`);
+    }
+  }
+
+  for (const path of paths) {
+    const allowed =
+      path === 'package.json' ||
+      path === 'README.md' ||
+      path.startsWith('dist/');
+    if (!allowed) {
+      throw new Error(`packed path outside publish allowlist: ${path}`);
+    }
+  }
+
   return paths;
 }
 
@@ -175,6 +198,8 @@ try {
       tar_file_count: second.tarPaths.length,
       canonical_filename_verified: second.meta.filename === expectedFilename,
       tar_paths_safe: true,
+      tar_regular_files_only: true,
+      publish_path_allowlist_verified: true,
       tar_census_matches_npm_metadata: true,
       files: second.files,
     },
@@ -198,6 +223,8 @@ try {
       canonical_filename_verified: true,
       tar_census_independently_verified: true,
       tar_paths_safe: true,
+      tar_regular_files_only: true,
+      publish_path_allowlist_verified: true,
       lifecycle_install_hooks_absent: true,
       reproducible_pack_verified: true,
       local_64_suite_bound: false,
