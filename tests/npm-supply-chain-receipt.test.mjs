@@ -84,7 +84,7 @@ function fixture({
     vulnerabilities: {},
     metadata: {
       vulnerabilities: { info: 0, low, moderate: 0, high: 0, critical: 0, total },
-      dependencies: { prod: 12, dev: 32, optional: 27, peer: 1, peerOptional: 0, total: 44 },
+      dependencies: { prod: 1, dev: 1, optional: 0, peer: 0, peerOptional: 0, total: 2 },
     },
   }, null, 2) + '\n');
 
@@ -189,6 +189,9 @@ test('supply-chain receipt binds exact source, package receipt, lock, audit, sig
   assert.equal(receipt.package_receipt.tarball_sha256, 'b'.repeat(64));
   assert.equal(receipt.audit.policy_threshold, 'low');
   assert.equal(receipt.audit.vulnerabilities.total, 0);
+  assert.equal(receipt.audit.dependencies.total, 2);
+  assert.equal(receipt.audit.lock_package_count, 2);
+  assert.equal(receipt.verification.audit_lock_graph_count_bound, true);
   assert.equal(receipt.signatures.missing_count, 0);
   assert.equal(receipt.signatures.invalid_count, 0);
   assert.equal(receipt.signatures.verified_count, 2);
@@ -283,6 +286,17 @@ test('dangling SBOM dependency target fails closed', () => {
   const result = run(root);
   assert.notEqual(result.status, 0);
   assert.match(`${result.stderr}\n${result.stdout}`, /SBOM_DEPENDENCY_TARGET_UNKNOWN/);
+});
+
+test('audit dependency total must equal locked non-root package count', () => {
+  const root = fixture();
+  const path = join(root, 'artifacts', 'npm-audit.json');
+  const audit = JSON.parse(readFileSync(path, 'utf8'));
+  audit.metadata.dependencies.total = 999;
+  writeFileSync(path, `${JSON.stringify(audit, null, 2)}\n`);
+  const result = run(root);
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stderr}\n${result.stdout}`, /AUDIT_LOCK_GRAPH_COUNT_MISMATCH/);
 });
 
 test('one LOW vulnerability fails closed', () => {

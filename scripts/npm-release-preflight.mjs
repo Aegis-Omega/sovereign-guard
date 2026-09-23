@@ -301,6 +301,9 @@ if (supply.verification?.exact_source_sha_verified !== true) fail('SUPPLY_CHAIN_
 if (supply.verification?.package_receipt_bound !== true) fail('SUPPLY_CHAIN_PACKAGE_RECEIPT_UNBOUND');
 if (supply.verification?.lockfile_bound !== true) fail('SUPPLY_CHAIN_LOCKFILE_UNBOUND');
 if (supply.verification?.zero_vulnerability_snapshot_verified !== true) fail('SUPPLY_CHAIN_AUDIT_UNVERIFIED');
+if (supply.verification?.audit_lock_graph_count_bound !== true) {
+  fail('SUPPLY_CHAIN_AUDIT_LOCK_GRAPH_UNVERIFIED');
+}
 if (supply.verification?.registry_signatures_verified !== true) fail('SUPPLY_CHAIN_SIGNATURES_UNVERIFIED');
 if (supply.verification?.registry_signatures_lock_bound !== true) {
   fail('SUPPLY_CHAIN_SIGNATURE_LOCK_BINDING_UNVERIFIED');
@@ -381,6 +384,24 @@ if (vulnerabilities.total !== vulnerabilitySeverityTotal) {
   );
 }
 if (vulnerabilities.total !== 0) fail('NON_ZERO_VULNERABILITY_SNAPSHOT');
+
+const auditDependencies = audit.metadata?.dependencies;
+if (!auditDependencies || !Number.isInteger(auditDependencies.total) || auditDependencies.total < 0) {
+  fail('AUDIT_DEPENDENCY_METADATA_INVALID');
+}
+const lockPackageCount = Object.keys(lock.packages ?? {}).filter((location) => location !== '').length;
+if (auditDependencies.total !== lockPackageCount) {
+  fail(
+    'AUDIT_LOCK_GRAPH_COUNT_MISMATCH',
+    `audit=${auditDependencies.total} lock=${lockPackageCount}`,
+  );
+}
+if (
+  supply.audit?.dependencies?.total !== auditDependencies.total ||
+  supply.audit?.lock_package_count !== lockPackageCount
+) {
+  fail('AUDIT_LOCK_GRAPH_RECEIPT_MISMATCH');
+}
 
 const verified = Array.isArray(signatures.verified) ? signatures.verified : null;
 const missing = Array.isArray(signatures.missing) ? signatures.missing : null;

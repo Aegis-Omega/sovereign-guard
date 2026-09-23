@@ -305,6 +305,18 @@ if (vulnerabilities.total !== 0) {
   fail('AUDIT_VULNERABILITY_DEBT', `total=${vulnerabilities.total}`);
 }
 
+const auditDependencies = audit.metadata?.dependencies;
+if (!auditDependencies || !Number.isInteger(auditDependencies.total) || auditDependencies.total < 0) {
+  fail('AUDIT_DEPENDENCY_METADATA_INVALID');
+}
+const lockPackageCount = Object.keys(lock.packages ?? {}).filter((location) => location !== '').length;
+if (auditDependencies.total !== lockPackageCount) {
+  fail(
+    'AUDIT_LOCK_GRAPH_COUNT_MISMATCH',
+    `audit=${auditDependencies.total} lock=${lockPackageCount}`,
+  );
+}
+
 const missing = Array.isArray(signatures.missing) ? signatures.missing : null;
 const invalid = Array.isArray(signatures.invalid) ? signatures.invalid : null;
 const verified = Array.isArray(signatures.verified) ? signatures.verified : null;
@@ -362,7 +374,8 @@ const receiptCore = {
       critical: vulnerabilities.critical,
       total: vulnerabilities.total,
     },
-    dependencies: audit.metadata?.dependencies ?? null,
+    dependencies: auditDependencies,
+    lock_package_count: lockPackageCount,
     canonical_sha256: auditCanonicalSha256,
   },
   signatures: {
@@ -392,6 +405,7 @@ const receiptCore = {
     package_receipt_bound: true,
     lockfile_bound: true,
     zero_vulnerability_snapshot_verified: true,
+    audit_lock_graph_count_bound: true,
     registry_signatures_verified: true,
     registry_signatures_lock_bound: true,
     provenance_attestations_observed: true,

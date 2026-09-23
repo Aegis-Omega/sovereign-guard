@@ -128,7 +128,7 @@ function fixture() {
   const audit = {
     metadata: {
       vulnerabilities: { info: 0, low: 0, moderate: 0, high: 0, critical: 0, total: 0 },
-      dependencies: { prod: 1, dev: 1, optional: 0, peer: 0, peerOptional: 0, total: 2 },
+      dependencies: { prod: 1, dev: 0, optional: 0, peer: 0, peerOptional: 0, total: 1 },
     },
   };
   const auditPath = join(artifacts, 'npm-audit.json');
@@ -211,6 +211,8 @@ function fixture() {
     },
     audit: {
       vulnerabilities: audit.metadata.vulnerabilities,
+      dependencies: audit.metadata.dependencies,
+      lock_package_count: 1,
       canonical_sha256: canonicalSha256(audit),
     },
     signatures: {
@@ -234,6 +236,7 @@ function fixture() {
       package_receipt_bound: true,
       lockfile_bound: true,
       zero_vulnerability_snapshot_verified: true,
+      audit_lock_graph_count_bound: true,
       registry_signatures_verified: true,
       registry_signatures_lock_bound: true,
       provenance_attestations_observed: true,
@@ -341,6 +344,21 @@ test('source lockfile mismatch fails closed', () => {
   const result = run(f);
   assert.notEqual(result.status, 0);
   assert.match(`${result.stderr}\n${result.stdout}`, /LOCKFILE_HASH_MISMATCH/);
+});
+
+test('audit dependency total must equal the locked graph size', () => {
+  const f = fixture();
+  const audit = JSON.parse(readFileSync(f.auditPath, 'utf8'));
+  audit.metadata.dependencies.total = 999;
+  writeFileSync(f.auditPath, `${JSON.stringify(audit, null, 2)}\n`);
+  refreshSupply(f, (supply) => {
+    supply.audit.dependencies = audit.metadata.dependencies;
+    supply.audit.lock_package_count = 1;
+    supply.audit.canonical_sha256 = canonicalSha256(audit);
+  });
+  const result = run(f);
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stderr}\n${result.stdout}`, /AUDIT_LOCK_GRAPH_COUNT_MISMATCH/);
 });
 
 test('audit evidence hash mismatch fails closed', () => {
