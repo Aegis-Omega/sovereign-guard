@@ -1,33 +1,291 @@
-# This workflow will run tests using node and then publish a package to GitHub Packages when a release is created
-# For more information see: https://docs.github.com/en/actions/publishing-packages/publishing-nodejs-packages
-
-name: Node.js Package
+name: NPM Verified Release
 
 on:
   release:
-    types: [created]
+    types: [published]
+
+permissions:
+  contents: read
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  verify-package:
+    runs-on: ubuntu-24.04
+    outputs:
+      source_sha: ${{ steps.source.outputs.sha }}
+      evidence_run_id: ${{ steps.evidence.outputs.run_id }}
+      evidence_run_attempt: ${{ steps.evidence.outputs.run_attempt }}
+      artifact_name: ${{ steps.evidence.outputs.artifact_name }}
+      artifact_id: ${{ steps.upload.outputs.artifact-id }}
+      artifact_digest: ${{ steps.upload.outputs.artifact-digest }}
+      tarball_sha256: ${{ steps.package_digest.outputs.tarball_sha256 }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          node-version: 20
-      - run: npm ci
-      - run: npm test
-
-  publish-npm:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Bind release event SHA to release tag
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag='${{ github.event.release.tag_name }}'
+          event_sha='${{ github.sha }}'
+          head="$(git rev-parse HEAD)"
+          tagged="$(git rev-parse "${tag}^{commit}")"
+          test "$head" = "$event_sha"
+          test "$tagged" = "$event_sha"
+          echo "sha=$event_sha" >> "$GITHUB_OUTPUT"
+      - name: Bind evidence producer identity
+        id: evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "run_id=${{ github.run_id }}" >> "$GITHUB_OUTPUT"
+          echo "run_attempt=${{ github.run_attempt }}" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=sovereign-guard-npm-${{ steps.source.outputs.sha }}-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}" >> "$GITHUB_OUTPUT"
+      - name: Require release source to be admitted by master history
+        shell: bash
+        run: |
+          set -euo pipefail
+          head='${{ steps.source.outputs.sha }}'
+          git show-ref --verify --quiet refs/remotes/origin/master
+          git merge-base --is-ancestor "$head" refs/remotes/origin/master
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
-          node-version: 20
+          node-version: 24
           registry-url: https://registry.npmjs.org/
+      - name: Pin release npm toolchain
+        run: |
+          npm install --global npm@11.19.0
+          test "$(npm --version)" = "11.19.0"
       - run: npm ci
-      - run: npm publish
+      - run: npm run build
+      - run: npm test
+      - name: Generate full-graph dependency vulnerability report
+        run: |
+          mkdir -p artifacts
+          npm audit --audit-level=low --json > artifacts/npm-audit.json
+      - name: Verify registry signatures and provenance attestations
+        run: npm audit signatures --json --include-attestations > artifacts/npm-signatures.json
+      - name: Generate CycloneDX SBOM
+        run: npm sbom --sbom-format=cyclonedx > artifacts/sbom.cdx.json
+      - name: Produce exact npm tarball and package receipt
         env:
-          NODE_AUTH_TOKEN: ${{secrets.npm_token}}
+          AEGIS_SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          KEEP_NPM_TARBALL: '1'
+        run: npm run verify:package
+      - name: Bind canonical package tarball digest
+        id: package_digest
+        shell: bash
+        run: |
+          set -euo pipefail
+          digest="$(node -e "const r=require('./artifacts/NpmPackageReceiptV1.json'); process.stdout.write(r.package.sha256)")"
+          [[ "$digest" =~ ^[0-9a-f]{64}$ ]]
+          echo "tarball_sha256=$digest" >> "$GITHUB_OUTPUT"
+      - name: Produce canonical supply-chain receipt
+        env:
+          AEGIS_SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          AEGIS_GITHUB_RUN_ID: ${{ github.run_id }}
+          AEGIS_GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+          AEGIS_GITHUB_RUN_NUMBER: ${{ github.run_number }}
+          AEGIS_GITHUB_WORKFLOW: ${{ github.workflow }}
+          AEGIS_GITHUB_EVENT_NAME: ${{ github.event_name }}
+        run: npm run verify:supply-chain
+      - name: Hash verified release evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          find artifacts -maxdepth 1 -type f ! -name 'supply-chain.sha256' -print0 \
+            | sort -z \
+            | xargs -0 sha256sum \
+            > artifacts/supply-chain.sha256
+      - name: Upload verified npm artifact
+        id: upload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: ${{ steps.evidence.outputs.artifact_name }}
+          path: |
+            sovereign-guard-*.tgz
+            artifacts/*.json
+            artifacts/*.sha256
+          if-no-files-found: error
+          retention-days: 90
+
+  node-engine-compatibility:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20', '22', '24']
+    env:
+      npm_config_engine_strict: 'true'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Assert exact compatibility candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = '${{ github.sha }}'
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: ${{ matrix.node }}
+          registry-url: https://registry.npmjs.org/
+      - name: Pin compatibility npm toolchain
+        run: |
+          npm install --global npm@11.19.0
+          test "$(npm --version)" = "11.19.0"
+      - name: Record runtime
+        run: |
+          node --version
+          npm --version
+      - run: npm ci
+      - run: npm run build
+      - name: Verify packed runtime compatibility
+        env:
+          AEGIS_SOURCE_SHA: ${{ github.sha }}
+          AEGIS_NODE_MAJOR: ${{ matrix.node }}
+        run: node scripts/npm-engine-compat-smoke.cjs
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: node-engine-compat-release-${{ github.sha }}-node-${{ matrix.node }}-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: artifacts/NodeEngineCompatibilityReceiptV1-node-${{ matrix.node }}.json
+          if-no-files-found: error
+          retention-days: 30
+
+  node-engine-compatibility-summary:
+    needs: node-engine-compatibility
+    runs-on: ubuntu-24.04
+    outputs:
+      source_sha: ${{ steps.summary.outputs.source_sha }}
+      receipt_sha256: ${{ steps.summary.outputs.receipt_sha256 }}
+      tarball_sha256: ${{ steps.summary.outputs.tarball_sha256 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: node-engine-compat-release-${{ github.sha }}-node-*-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: compat-receipts
+          merge-multiple: true
+          digest-mismatch: error
+      - name: Verify Node engine compatibility matrix
+        id: summary
+        env:
+          AEGIS_SOURCE_SHA: ${{ github.sha }}
+        run: node scripts/npm-engine-compat-summary.mjs compat-receipts
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: node-engine-compat-release-${{ github.sha }}-summary-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: artifacts/NodeEngineMatrixReceiptV1.json
+          if-no-files-found: error
+          retention-days: 30
+
+  release-npm:
+    needs: [verify-package, node-engine-compatibility-summary]
+    runs-on: ubuntu-24.04
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ needs.verify-package.outputs.source_sha }}
+          persist-credentials: false
+      - name: Reassert release checkout source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = '${{ needs.verify-package.outputs.source_sha }}'
+      - name: Require exact-source Node engine compatibility matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          test '${{ needs.node-engine-compatibility-summary.outputs.source_sha }}' = '${{ needs.verify-package.outputs.source_sha }}'
+          [[ '${{ needs.node-engine-compatibility-summary.outputs.receipt_sha256 }}' =~ ^[0-9a-f]{64}$ ]]
+          [[ '${{ needs.node-engine-compatibility-summary.outputs.tarball_sha256 }}' =~ ^[0-9a-f]{64}$ ]]
+          test '${{ needs.node-engine-compatibility-summary.outputs.tarball_sha256 }}' = '${{ needs.verify-package.outputs.tarball_sha256 }}'
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org/
+      - name: Pin release npm toolchain
+        run: |
+          npm install --global npm@11.19.0
+          test "$(npm --version)" = "11.19.0"
+      - name: Assert immutable artifact producer metadata
+        shell: bash
+        env:
+          ARTIFACT_ID: ${{ needs.verify-package.outputs.artifact_id }}
+          ARTIFACT_DIGEST: ${{ needs.verify-package.outputs.artifact_digest }}
+        run: |
+          set -euo pipefail
+          [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$ARTIFACT_DIGEST" =~ ^(sha256:)?[0-9a-f]{64}$ ]]
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          artifact-ids: ${{ needs.verify-package.outputs.artifact_id }}
+          path: verified-package
+          merge-multiple: true
+          digest-mismatch: error
+      - name: Assert exactly one verified tarball
+        id: tarball
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t tgz < <(find verified-package -maxdepth 1 -type f -name 'sovereign-guard-*.tgz' -print)
+          test "${#tgz[@]}" -eq 1
+          echo "path=${tgz[0]}" >> "$GITHUB_OUTPUT"
+      - name: Reverify receipt roots, exact release source, and tarball binding
+        env:
+          VERIFIED_PACKAGE_ROOT: verified-package
+          EXPECTED_SOURCE_SHA: ${{ needs.verify-package.outputs.source_sha }}
+          EXPECTED_RUN_ID: ${{ needs.verify-package.outputs.evidence_run_id }}
+          EXPECTED_RUN_ATTEMPT: ${{ needs.verify-package.outputs.evidence_run_attempt }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/npm-release-preflight.mjs '${{ steps.tarball.outputs.path }}'
+      - name: Resolve explicit release mode
+        id: mode
+        shell: bash
+        env:
+          NPM_RELEASE_MODE: ${{ vars.NPM_RELEASE_MODE }}
+        run: |
+          set -euo pipefail
+          case "$NPM_RELEASE_MODE" in
+            trusted-stage|bootstrap-token)
+              echo "mode=$NPM_RELEASE_MODE" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "NPM_RELEASE_MODE must be explicitly set to trusted-stage or bootstrap-token" >&2
+              exit 1
+              ;;
+          esac
+      - name: Validate release mode against npm registry bootstrap state
+        env:
+          NPM_RELEASE_MODE: ${{ steps.mode.outputs.mode }}
+        run: node scripts/npm-release-mode-guard.mjs
+      - name: Stage verified tarball through npm trusted publishing
+        if: steps.mode.outputs.mode == 'trusted-stage'
+        shell: bash
+        run: npm stage publish '${{ steps.tarball.outputs.path }}' --ignore-scripts
+      - name: Bootstrap first registry publication with explicit token mode
+        if: steps.mode.outputs.mode == 'bootstrap-token'
+        shell: bash
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN || secrets.npm_token }}
+        run: |
+          set -euo pipefail
+          test -n "$NODE_AUTH_TOKEN"
+          npm publish '${{ steps.tarball.outputs.path }}' --ignore-scripts --provenance --access public

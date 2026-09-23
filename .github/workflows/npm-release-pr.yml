@@ -1,0 +1,161 @@
+name: NPM Release PR Gate
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  preregistered:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Assert exact PR head
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = '${{ github.event.pull_request.head.sha }}'
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+      - name: Pin current npm verification toolchain
+        run: |
+          npm install --global npm@11.19.0
+          test "$(npm --version)" = "11.19.0"
+      - run: npm ci
+      - run: npm run build
+      - run: node --test tests/*.test.mjs
+      - name: Generate full-graph dependency vulnerability report
+        id: audit
+        continue-on-error: true
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          npm audit --audit-level=low --json > artifacts/npm-audit.json
+      - name: Verify registry signatures and provenance attestations
+        id: signatures
+        continue-on-error: true
+        shell: bash
+        run: npm audit signatures --json --include-attestations > artifacts/npm-signatures.json
+      - name: Generate CycloneDX SBOM
+        run: npm sbom --sbom-format=cyclonedx > artifacts/sbom.cdx.json
+      - name: Generate exact-source npm package receipt
+        id: receipt
+        continue-on-error: true
+        env:
+          AEGIS_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          set -o pipefail
+          node scripts/npm-proof-receipt.mjs >npm-receipt.stdout 2>npm-receipt.stderr
+      - name: Generate canonical supply-chain receipt
+        id: supply
+        continue-on-error: true
+        env:
+          AEGIS_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+          AEGIS_GITHUB_RUN_ID: ${{ github.run_id }}
+          AEGIS_GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+          AEGIS_GITHUB_RUN_NUMBER: ${{ github.run_number }}
+          AEGIS_GITHUB_WORKFLOW: ${{ github.workflow }}
+          AEGIS_GITHUB_EVENT_NAME: ${{ github.event_name }}
+        shell: bash
+        run: |
+          set -o pipefail
+          node scripts/npm-supply-chain-receipt.mjs >npm-supply.stdout 2>npm-supply.stderr
+      - name: Upload receipt diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: npm-receipt-diagnostics-${{ github.event.pull_request.head.sha }}-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: |
+            npm-receipt.stdout
+            npm-receipt.stderr
+            npm-supply.stdout
+            npm-supply.stderr
+            artifacts/*.json
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Fail closed on package or supply-chain debt
+        if: steps.receipt.outcome != 'success' || steps.audit.outcome != 'success' || steps.signatures.outcome != 'success' || steps.supply.outcome != 'success'
+        run: exit 1
+
+  node-engine-compatibility:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20', '22', '24']
+    env:
+      npm_config_engine_strict: 'true'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Assert exact compatibility candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = '${{ github.event.pull_request.head.sha }}'
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: ${{ matrix.node }}
+          registry-url: https://registry.npmjs.org/
+      - name: Pin compatibility npm toolchain
+        run: |
+          npm install --global npm@11.19.0
+          test "$(npm --version)" = "11.19.0"
+      - name: Record runtime
+        run: |
+          node --version
+          npm --version
+      - run: npm ci
+      - run: npm run build
+      - name: Verify packed runtime compatibility
+        env:
+          AEGIS_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+          AEGIS_NODE_MAJOR: ${{ matrix.node }}
+        run: node scripts/npm-engine-compat-smoke.cjs
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: node-engine-compat-pr-${{ github.event.pull_request.head.sha }}-node-${{ matrix.node }}-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: artifacts/NodeEngineCompatibilityReceiptV1-node-${{ matrix.node }}.json
+          if-no-files-found: error
+          retention-days: 30
+
+  node-engine-compatibility-summary:
+    needs: node-engine-compatibility
+    runs-on: ubuntu-24.04
+    outputs:
+      source_sha: ${{ steps.summary.outputs.source_sha }}
+      receipt_sha256: ${{ steps.summary.outputs.receipt_sha256 }}
+      tarball_sha256: ${{ steps.summary.outputs.tarball_sha256 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: node-engine-compat-pr-${{ github.event.pull_request.head.sha }}-node-*-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: compat-receipts
+          merge-multiple: true
+          digest-mismatch: error
+      - name: Verify Node engine compatibility matrix
+        id: summary
+        env:
+          AEGIS_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/npm-engine-compat-summary.mjs compat-receipts
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: node-engine-compat-pr-${{ github.event.pull_request.head.sha }}-summary-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: artifacts/NodeEngineMatrixReceiptV1.json
+          if-no-files-found: error
+          retention-days: 30
