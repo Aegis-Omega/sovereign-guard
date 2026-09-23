@@ -154,6 +154,10 @@ jobs:
               exit 1
               ;;
           esac
+      - name: Validate release mode against npm registry bootstrap state
+        env:
+          NPM_RELEASE_MODE: ${{ steps.mode.outputs.mode }}
+        run: node scripts/npm-release-mode-guard.mjs
       - name: Stage verified tarball through npm trusted publishing
         if: steps.mode.outputs.mode == 'trusted-stage'
         shell: bash
