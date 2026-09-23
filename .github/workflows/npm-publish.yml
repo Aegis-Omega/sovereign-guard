@@ -6,15 +6,17 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   verify-package:
     runs-on: ubuntu-24.04
+    outputs:
+      source_sha: ${{ steps.source.outputs.sha }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
           persist-credentials: false
       - name: Assert release tag resolves to checked-out commit
         id: source
@@ -26,6 +28,13 @@ jobs:
           tagged="$(git rev-parse "${tag}^{commit}")"
           test "$head" = "$tagged"
           echo "sha=$head" >> "$GITHUB_OUTPUT"
+      - name: Require release source to be admitted by master history
+        shell: bash
+        run: |
+          set -euo pipefail
+          head='${{ steps.source.outputs.sha }}'
+          git show-ref --verify --quiet refs/remotes/origin/master
+          git merge-base --is-ancestor "$head" refs/remotes/origin/master
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24
@@ -54,6 +63,11 @@ jobs:
       - name: Produce canonical supply-chain receipt
         env:
           AEGIS_SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          AEGIS_GITHUB_RUN_ID: ${{ github.run_id }}
+          AEGIS_GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+          AEGIS_GITHUB_RUN_NUMBER: ${{ github.run_number }}
+          AEGIS_GITHUB_WORKFLOW: ${{ github.workflow }}
+          AEGIS_GITHUB_EVENT_NAME: ${{ github.event_name }}
         run: npm run verify:supply-chain
       - name: Hash verified release evidence
         shell: bash
@@ -78,6 +92,9 @@ jobs:
     needs: verify-package
     runs-on: ubuntu-24.04
     environment: npm
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
@@ -100,7 +117,11 @@ jobs:
           mapfile -t tgz < <(find verified-package -maxdepth 1 -type f -name 'sovereign-guard-*.tgz' -print)
           test "${#tgz[@]}" -eq 1
           echo "path=${tgz[0]}" >> "$GITHUB_OUTPUT"
-      - name: Reverify tarball and supply-chain binding
+      - name: Reverify receipt roots, exact release source, and tarball binding
+        env:
+          EXPECTED_SOURCE_SHA: ${{ needs.verify-package.outputs.source_sha }}
+          EXPECTED_RUN_ID: ${{ github.run_id }}
+          EXPECTED_RUN_ATTEMPT: ${{ github.run_attempt }}
         shell: bash
         run: |
           set -euo pipefail
@@ -111,10 +132,46 @@ jobs:
           node - <<'NODE'
           const fs = require('fs');
           const crypto = require('crypto');
+
           const root = './verified-package/artifacts';
-          const pkg = JSON.parse(fs.readFileSync(`${root}/NpmPackageReceiptV1.json`, 'utf8'));
-          const supply = JSON.parse(fs.readFileSync(`${root}/NpmSupplyChainReceiptV1.json`, 'utf8'));
-          const pkgFileSha = crypto.createHash('sha256').update(fs.readFileSync(`${root}/NpmPackageReceiptV1.json`)).digest('hex');
+          const pkgPath = `${root}/NpmPackageReceiptV1.json`;
+          const supplyPath = `${root}/NpmSupplyChainReceiptV1.json`;
+          const pkgBytes = fs.readFileSync(pkgPath);
+          const pkg = JSON.parse(pkgBytes);
+          const supply = JSON.parse(fs.readFileSync(supplyPath, 'utf8'));
+
+          function stable(value) {
+            if (Array.isArray(value)) return value.map(stable);
+            if (value && typeof value === 'object') {
+              return Object.fromEntries(
+                Object.keys(value).sort().map((key) => [key, stable(value[key])]),
+              );
+            }
+            return value;
+          }
+
+          function sha256(value) {
+            return crypto.createHash('sha256').update(value).digest('hex');
+          }
+
+          const expectedSource = process.env.EXPECTED_SOURCE_SHA;
+          if (!/^[0-9a-f]{40}$/i.test(expectedSource ?? '')) throw new Error('expected source SHA missing');
+          if (pkg.source?.git_sha !== expectedSource) throw new Error('package receipt source mismatch');
+          if (supply.source?.git_sha !== expectedSource) throw new Error('supply-chain receipt source mismatch');
+
+          const pkgCore = structuredClone(pkg);
+          const pkgRoot = pkgCore.receipt_sha256;
+          delete pkgCore.receipt_sha256;
+          const recomputedPkgRoot = sha256(Buffer.from(`${JSON.stringify(stable(pkgCore), null, 2)}\n`));
+          if (pkgRoot !== recomputedPkgRoot) throw new Error('package receipt root invalid');
+
+          const supplyCore = structuredClone(supply);
+          const supplyRoot = supplyCore.receipt_sha256;
+          delete supplyCore.receipt_sha256;
+          const recomputedSupplyRoot = sha256(Buffer.from(JSON.stringify(stable(supplyCore))));
+          if (supplyRoot !== recomputedSupplyRoot) throw new Error('supply-chain receipt root invalid');
+
+          const pkgFileSha = sha256(pkgBytes);
           if (supply.verification?.authority !== 'REMOTE_EXACT_SOURCE_SUPPLY_CHAIN_VERIFIED') throw new Error('supply-chain authority mismatch');
           if (supply.package_receipt?.receipt_root !== pkg.receipt_sha256) throw new Error('package receipt root mismatch');
           if (supply.package_receipt?.file_sha256 !== pkgFileSha) throw new Error('package receipt file hash mismatch');
@@ -122,6 +179,11 @@ jobs:
           if (supply.audit?.vulnerabilities?.total !== 0) throw new Error('non-zero vulnerability snapshot');
           if (supply.signatures?.missing_count !== 0 || supply.signatures?.invalid_count !== 0) throw new Error('registry signature debt');
           if (supply.verification?.local_64_suite_bound !== false) throw new Error('64-suite authority laundering');
+
+          if (String(supply.observation?.run_id) !== process.env.EXPECTED_RUN_ID) throw new Error('workflow run identity mismatch');
+          if (String(supply.observation?.run_attempt) !== process.env.EXPECTED_RUN_ATTEMPT) throw new Error('workflow run attempt mismatch');
+          if (supply.observation?.provider !== 'github-actions') throw new Error('workflow observation provider mismatch');
+          if (supply.observation?.event_name !== 'release') throw new Error('workflow observation event mismatch');
           NODE
       - name: Resolve explicit release mode
         id: mode

@@ -57,6 +57,11 @@ jobs:
         continue-on-error: true
         env:
           AEGIS_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+          AEGIS_GITHUB_RUN_ID: ${{ github.run_id }}
+          AEGIS_GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+          AEGIS_GITHUB_RUN_NUMBER: ${{ github.run_number }}
+          AEGIS_GITHUB_WORKFLOW: ${{ github.workflow }}
+          AEGIS_GITHUB_EVENT_NAME: ${{ github.event_name }}
         shell: bash
         run: |
           set -o pipefail

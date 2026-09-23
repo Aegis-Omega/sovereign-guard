@@ -17,9 +17,10 @@ Required verification path:
 5. Produce two independent `npm pack --json --ignore-scripts` outputs and require byte-for-byte equality, equal integrity metadata, and equal file census.
 6. Packed name/version must equal the committed manifest and install lifecycle hooks must be absent.
 7. Emit source SHA, package identity, file census, packed/unpacked sizes, npm shasum/integrity, SHA-256 and SHA-512 digests, and a deterministic timestamp-free `NpmPackageReceiptV1` root.
-8. Run dependency vulnerability audit, registry signature/provenance verification, and generate a CycloneDX SBOM as supply-chain evidence.
-9. Release must reuse the verified tarball. The workflow fails closed unless `NPM_RELEASE_MODE` explicitly selects `trusted-stage` or `bootstrap-token`; trusted staging is preferred and does not use a long-lived publish token.
-10. A package name, older source commit, remote reference, or local PASS count cannot authenticate a different source/test artifact.
+8. Run dependency vulnerability audit, registry signature/provenance verification, and generate a CycloneDX SBOM as supply-chain evidence. The canonical supply-chain receipt binds the GitHub Actions run id, attempt, run number, workflow, and event name so later advisory replays cannot inherit an older observation identity.
+9. A release tag is admissible only when its exact commit is contained in the canonical `master` history. A side-branch tag cannot reach registry action merely by passing package verification.
+10. Release must reuse the verified tarball. Before registry action, the release job recomputes both canonical receipt roots and requires package receipt source SHA = supply-chain receipt source SHA = admitted release SHA. The workflow fails closed unless `NPM_RELEASE_MODE` explicitly selects `trusted-stage` or `bootstrap-token`; OIDC permission exists only on the registry-action job.
+11. A package name, older source commit, remote reference, or local PASS count cannot authenticate a different source/test artifact.
 
 ## Advisory-drift falsification and remediation
 
@@ -33,7 +34,7 @@ The dependency graph was therefore refreshed only within the already committed `
 
 The generated `package-lock.json` SHA-256 was `07b6c8b2ddb35d8f28ca7e142234354b7a094c8a9f4b1c17fe71f87924f7a235`. The one-shot generator removed itself after committing the verified lock, so it is not part of the production workflow surface.
 
-This audit result is a time-bound registry/advisory observation, not a timeless property of the source. Future exact-head verification must rerun the audit rather than inherit this count.
+This audit result is a time-bound registry/advisory observation, not a timeless property of the source. Future exact-head verification must rerun the audit rather than inherit this count. `NpmSupplyChainReceiptV1` therefore carries hosted run identity (`run_id`, `run_attempt`, `run_number`, workflow and event) in its canonical root.
 
 ## Authority boundary
 

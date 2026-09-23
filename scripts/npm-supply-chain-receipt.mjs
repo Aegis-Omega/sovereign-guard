@@ -41,6 +41,18 @@ function fileSha256(path) {
   return sha256Bytes(readFileSync(path));
 }
 
+function requiredEnv(name) {
+  const value = (process.env[name] ?? '').trim();
+  if (!value) fail('OBSERVATION_ENV_MISSING', `name=${name}`);
+  return value;
+}
+
+function requiredPositiveIntegerEnv(name) {
+  const raw = requiredEnv(name);
+  if (!/^[1-9]\d*$/.test(raw)) fail('OBSERVATION_ENV_INVALID', `name=${name} value=${raw}`);
+  return Number(raw);
+}
+
 function normalizeSbom(input) {
   const sbom = structuredClone(input);
   const removedSerialNumber = Object.hasOwn(sbom, 'serialNumber');
@@ -69,6 +81,15 @@ const audit = readJson(auditPath);
 const signatures = readJson(signaturesPath);
 const sbomRaw = readJson(sbomPath);
 const lock = readJson(lockPath);
+
+const observation = {
+  provider: 'github-actions',
+  run_id: requiredPositiveIntegerEnv('AEGIS_GITHUB_RUN_ID'),
+  run_attempt: requiredPositiveIntegerEnv('AEGIS_GITHUB_RUN_ATTEMPT'),
+  run_number: requiredPositiveIntegerEnv('AEGIS_GITHUB_RUN_NUMBER'),
+  workflow: requiredEnv('AEGIS_GITHUB_WORKFLOW'),
+  event_name: requiredEnv('AEGIS_GITHUB_EVENT_NAME'),
+};
 
 if (packageReceipt.receipt_version !== 'NpmPackageReceiptV1') fail('PACKAGE_RECEIPT_VERSION_MISMATCH');
 if (packageReceipt.source?.repository !== 'Aegis-Omega/sovereign-guard') fail('PACKAGE_RECEIPT_REPOSITORY_MISMATCH');
@@ -134,6 +155,7 @@ const receiptCore = {
     repository: packageReceipt.source.repository,
     git_sha: packageReceipt.source.git_sha,
   },
+  observation,
   package: {
     name: packageReceipt.package.name,
     version: packageReceipt.package.version,

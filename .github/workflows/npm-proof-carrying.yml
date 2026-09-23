@@ -62,6 +62,11 @@ jobs:
         continue-on-error: true
         env:
           AEGIS_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          AEGIS_GITHUB_RUN_ID: ${{ github.run_id }}
+          AEGIS_GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+          AEGIS_GITHUB_RUN_NUMBER: ${{ github.run_number }}
+          AEGIS_GITHUB_WORKFLOW: ${{ github.workflow }}
+          AEGIS_GITHUB_EVENT_NAME: ${{ github.event_name }}
         run: npm run verify:supply-chain
       - name: Hash supply-chain evidence
         if: always()

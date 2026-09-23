@@ -69,10 +69,19 @@ function fixture({ low = 0, missing = [], invalid = [], timestamp = '2026-08-28T
   return root;
 }
 
-function run(root) {
+function run(root, envOverrides = {}) {
   return spawnSync(process.execPath, [SCRIPT.pathname], {
     cwd: root,
-    env: { ...process.env, AEGIS_SOURCE_SHA: SOURCE_SHA },
+    env: {
+      ...process.env,
+      AEGIS_SOURCE_SHA: SOURCE_SHA,
+      AEGIS_GITHUB_RUN_ID: '33130879805',
+      AEGIS_GITHUB_RUN_ATTEMPT: '1',
+      AEGIS_GITHUB_RUN_NUMBER: '48',
+      AEGIS_GITHUB_WORKFLOW: 'NPM Proof-Carrying Release',
+      AEGIS_GITHUB_EVENT_NAME: 'pull_request',
+      ...envOverrides,
+    },
     encoding: 'utf8',
   });
 }
@@ -89,6 +98,12 @@ test('supply-chain receipt binds exact source, package receipt, lock, audit, sig
   const receipt = JSON.parse(readFileSync(join(root, 'artifacts', 'NpmSupplyChainReceiptV1.json'), 'utf8'));
   assert.equal(receipt.receipt_version, 'NpmSupplyChainReceiptV1');
   assert.equal(receipt.source.git_sha, SOURCE_SHA);
+  assert.equal(receipt.observation.provider, 'github-actions');
+  assert.equal(receipt.observation.run_id, 33130879805);
+  assert.equal(receipt.observation.run_attempt, 1);
+  assert.equal(receipt.observation.run_number, 48);
+  assert.equal(receipt.observation.workflow, 'NPM Proof-Carrying Release');
+  assert.equal(receipt.observation.event_name, 'pull_request');
   assert.equal(receipt.package_receipt.receipt_root, 'c'.repeat(64));
   assert.equal(receipt.package_receipt.tarball_sha256, 'b'.repeat(64));
   assert.equal(receipt.audit.policy_threshold, 'low');
@@ -132,4 +147,11 @@ test('missing or invalid registry signature fails closed', () => {
   const invalid = run(fixture({ invalid: [{ name: 'dependency-y', version: '2.0.0' }] }));
   assert.notEqual(invalid.status, 0);
   assert.match(`${invalid.stderr}\n${invalid.stdout}`, /REGISTRY_SIGNATURE_DEBT/);
+});
+
+
+test('missing hosted-run identity fails closed', () => {
+  const result = run(fixture(), { AEGIS_GITHUB_RUN_ID: '' });
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stderr}\n${result.stdout}`, /OBSERVATION_ENV_MISSING/);
 });
