@@ -15,8 +15,10 @@ jobs:
       evidence_run_id: ${{ steps.evidence.outputs.run_id }}
       evidence_run_attempt: ${{ steps.evidence.outputs.run_attempt }}
       artifact_name: ${{ steps.evidence.outputs.artifact_name }}
+      artifact_id: ${{ steps.upload.outputs.artifact-id }}
+      artifact_digest: ${{ steps.upload.outputs.artifact-digest }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
@@ -48,7 +50,7 @@ jobs:
           head='${{ steps.source.outputs.sha }}'
           git show-ref --verify --quiet refs/remotes/origin/master
           git merge-base --is-ancestor "$head" refs/remotes/origin/master
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org/
@@ -91,7 +93,8 @@ jobs:
             | xargs -0 sha256sum \
             > artifacts/supply-chain.sha256
       - name: Upload verified npm artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        id: upload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: ${{ steps.evidence.outputs.artifact_name }}
           path: |
@@ -109,7 +112,7 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ needs.verify-package.outputs.source_sha }}
           persist-credentials: false
@@ -118,7 +121,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = '${{ needs.verify-package.outputs.source_sha }}'
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org/
@@ -126,10 +129,20 @@ jobs:
         run: |
           npm install --global npm@11.19.0
           test "$(npm --version)" = "11.19.0"
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      - name: Assert immutable artifact producer metadata
+        shell: bash
+        env:
+          ARTIFACT_ID: ${{ needs.verify-package.outputs.artifact_id }}
+          ARTIFACT_DIGEST: ${{ needs.verify-package.outputs.artifact_digest }}
+        run: |
+          set -euo pipefail
+          [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$ARTIFACT_DIGEST" =~ ^(sha256:)?[0-9a-f]{64}$ ]]
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          name: ${{ needs.verify-package.outputs.artifact_name }}
+          artifact-ids: ${{ needs.verify-package.outputs.artifact_id }}
           path: verified-package
+          merge-multiple: true
       - name: Assert exactly one verified tarball
         id: tarball
         shell: bash

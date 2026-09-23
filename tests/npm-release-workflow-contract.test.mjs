@@ -41,11 +41,16 @@ test('release artifact is bound to producer run and attempt', () => {
   assert.match(workflow, /evidence_run_id: \$\{\{ steps\.evidence\.outputs\.run_id \}\}/);
   assert.match(workflow, /evidence_run_attempt: \$\{\{ steps\.evidence\.outputs\.run_attempt \}\}/);
   assert.match(workflow, /artifact_name: \$\{\{ steps\.evidence\.outputs\.artifact_name \}\}/);
+  assert.match(workflow, /artifact_id: \$\{\{ steps\.upload\.outputs\.artifact-id \}\}/);
+  assert.match(workflow, /artifact_digest: \$\{\{ steps\.upload\.outputs\.artifact-digest \}\}/);
   assert.match(
     workflow,
-    /name: \$\{\{ needs\.verify-package\.outputs\.artifact_name \}\}/,
+    /artifact-ids: \$\{\{ needs\.verify-package\.outputs\.artifact_id \}\}/,
   );
   assert.doesNotMatch(workflow, /pattern: sovereign-guard-npm-\*/);
+  assert.doesNotMatch(workflow, /name: \$\{\{ needs\.verify-package\.outputs\.artifact_name \}\}/);
+  assert.match(workflow, /ARTIFACT_ID: \$\{\{ needs\.verify-package\.outputs\.artifact_id \}\}/);
+  assert.match(workflow, /ARTIFACT_DIGEST: \$\{\{ needs\.verify-package\.outputs\.artifact_digest \}\}/);
   assert.match(
     workflow,
     /EXPECTED_RUN_ID: \$\{\{ needs\.verify-package\.outputs\.evidence_run_id \}\}/,
@@ -68,4 +73,13 @@ test('OIDC permission is not granted at workflow top level', () => {
     workflow,
     /release-npm:[\s\S]*?permissions:\n\s+contents: read\n\s+id-token: write/,
   );
+});
+
+
+test('GitHub Actions dependencies are pinned to Node24-native signed release SHAs', () => {
+  assert.match(workflow, /actions\/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1/);
+  assert.match(workflow, /actions\/setup-node@820762786026740c76f36085b0efc47a31fe5020/);
+  assert.match(workflow, /actions\/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a/);
+  assert.match(workflow, /actions\/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c/);
+  assert.doesNotMatch(workflow, /11d5960a326750d5838078e36cf38b85af677262|49933ea5288caeca8642d1e84afbd3f7d6820020|ea165f8d65b6e75b540449e92b4886f43607fa02|d3f86a106a0bac45b974a628896c90dbdf5c8093/);
 });
