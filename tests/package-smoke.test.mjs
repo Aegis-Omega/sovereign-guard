@@ -11,6 +11,10 @@ test('package identity is sovereign-guard', () => {
   assert.match(pkg.version, /^\d+\.\d+\.\d+(?:[-+].*)?$/);
 });
 
+test('declared Node engine floor matches the locked runtime graph', () => {
+  assert.equal(pkg.engines?.node, '>=20');
+});
+
 test('build outputs declared package entrypoints', () => {
   assert.ok(existsSync(new URL('../dist/src/index.js', import.meta.url)), 'missing dist/src/index.js');
   assert.ok(existsSync(new URL('../dist/src/index.d.ts', import.meta.url)), 'missing dist/src/index.d.ts');

@@ -104,8 +104,81 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
+  node-engine-compatibility:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20', '22', '24']
+    env:
+      npm_config_engine_strict: 'true'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Assert exact compatibility candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = '${{ github.sha }}'
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: ${{ matrix.node }}
+          registry-url: https://registry.npmjs.org/
+      - name: Record runtime
+        run: |
+          node --version
+          npm --version
+      - run: npm ci
+      - run: npm run build
+      - name: Verify packed runtime compatibility
+        env:
+          AEGIS_SOURCE_SHA: ${{ github.sha }}
+          AEGIS_NODE_MAJOR: ${{ matrix.node }}
+        run: node scripts/npm-engine-compat-smoke.cjs
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: node-engine-compat-release-${{ github.sha }}-node-${{ matrix.node }}-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: artifacts/NodeEngineCompatibilityReceiptV1-node-${{ matrix.node }}.json
+          if-no-files-found: error
+          retention-days: 30
+
+  node-engine-compatibility-summary:
+    needs: node-engine-compatibility
+    runs-on: ubuntu-24.04
+    outputs:
+      source_sha: ${{ steps.summary.outputs.source_sha }}
+      receipt_sha256: ${{ steps.summary.outputs.receipt_sha256 }}
+      tarball_sha256: ${{ steps.summary.outputs.tarball_sha256 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: node-engine-compat-release-${{ github.sha }}-node-*-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: compat-receipts
+          merge-multiple: true
+          digest-mismatch: error
+      - name: Verify Node engine compatibility matrix
+        id: summary
+        env:
+          AEGIS_SOURCE_SHA: ${{ github.sha }}
+        run: node scripts/npm-engine-compat-summary.mjs compat-receipts
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: node-engine-compat-release-${{ github.sha }}-summary-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: artifacts/NodeEngineMatrixReceiptV1.json
+          if-no-files-found: error
+          retention-days: 30
+
   release-npm:
-    needs: verify-package
+    needs: [verify-package, node-engine-compatibility-summary]
     runs-on: ubuntu-24.04
     environment: npm
     permissions:
@@ -121,6 +194,13 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = '${{ needs.verify-package.outputs.source_sha }}'
+      - name: Require exact-source Node engine compatibility matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          test '${{ needs.node-engine-compatibility-summary.outputs.source_sha }}' = '${{ needs.verify-package.outputs.source_sha }}'
+          [[ '${{ needs.node-engine-compatibility-summary.outputs.receipt_sha256 }}' =~ ^[0-9a-f]{64}$ ]]
+          [[ '${{ needs.node-engine-compatibility-summary.outputs.tarball_sha256 }}' =~ ^[0-9a-f]{64}$ ]]
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 24
