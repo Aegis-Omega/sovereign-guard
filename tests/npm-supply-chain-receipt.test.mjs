@@ -8,7 +8,14 @@ import { spawnSync } from 'node:child_process';
 const SCRIPT = new URL('../scripts/npm-supply-chain-receipt.mjs', import.meta.url);
 const SOURCE_SHA = 'a'.repeat(40);
 
-function fixture({ low = 0, missing = [], invalid = [], timestamp = '2026-08-28T00:00:00Z', serialNumber = 'urn:uuid:first' } = {}) {
+function fixture({
+  low = 0,
+  totalOverride = null,
+  missing = [],
+  invalid = [],
+  timestamp = '2026-08-28T00:00:00Z',
+  serialNumber = 'urn:uuid:first',
+} = {}) {
   const root = mkdtempSync(join(tmpdir(), 'guard-supply-chain-'));
   const artifacts = join(root, 'artifacts');
   mkdirSync(artifacts, { recursive: true });
@@ -27,7 +34,7 @@ function fixture({ low = 0, missing = [], invalid = [], timestamp = '2026-08-28T
     receipt_sha256: 'c'.repeat(64),
   }, null, 2) + '\n');
 
-  const total = low;
+  const total = totalOverride ?? low;
   writeFileSync(join(artifacts, 'npm-audit.json'), JSON.stringify({
     vulnerabilities: {},
     metadata: {
@@ -137,6 +144,15 @@ test('one LOW vulnerability fails closed', () => {
   const result = run(fixture({ low: 1 }));
   assert.notEqual(result.status, 0);
   assert.match(`${result.stderr}\n${result.stdout}`, /AUDIT_VULNERABILITY_DEBT/);
+});
+
+test('inconsistent npm audit total fails closed', () => {
+  const result = run(fixture({ low: 1, totalOverride: 0 }));
+  assert.notEqual(result.status, 0);
+  assert.match(
+    `${result.stderr}\n${result.stdout}`,
+    /AUDIT_VULNERABILITY_TOTAL_MISMATCH/,
+  );
 });
 
 test('missing or invalid registry signature fails closed', () => {

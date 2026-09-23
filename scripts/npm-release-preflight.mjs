@@ -177,9 +177,24 @@ if (supply.sbom?.normalized_sha256 !== canonicalSha256(normalizeSbom(sbom))) {
 const vulnerabilities = audit.metadata?.vulnerabilities;
 if (!vulnerabilities) fail('AUDIT_METADATA_MISSING');
 for (const severity of ['info', 'low', 'moderate', 'high', 'critical', 'total']) {
+  if (!Number.isInteger(vulnerabilities[severity]) || vulnerabilities[severity] < 0) {
+    fail('AUDIT_METADATA_INVALID', `severity=${severity}`);
+  }
   if (supply.audit?.vulnerabilities?.[severity] !== vulnerabilities[severity]) {
     fail('AUDIT_VULNERABILITY_COUNT_MISMATCH', `severity=${severity}`);
   }
+}
+const vulnerabilitySeverityTotal =
+  vulnerabilities.info +
+  vulnerabilities.low +
+  vulnerabilities.moderate +
+  vulnerabilities.high +
+  vulnerabilities.critical;
+if (vulnerabilities.total !== vulnerabilitySeverityTotal) {
+  fail(
+    'AUDIT_VULNERABILITY_TOTAL_MISMATCH',
+    `reported=${vulnerabilities.total} summed=${vulnerabilitySeverityTotal}`,
+  );
 }
 if (vulnerabilities.total !== 0) fail('NON_ZERO_VULNERABILITY_SNAPSHOT');
 

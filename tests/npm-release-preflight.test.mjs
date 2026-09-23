@@ -307,6 +307,24 @@ test('non-zero vulnerability snapshot fails closed with internally consistent ev
   assert.match(`${result.stderr}\n${result.stdout}`, /NON_ZERO_VULNERABILITY_SNAPSHOT/);
 });
 
+test('inconsistent audit total fails closed even when receipt and manifest are refreshed', () => {
+  const f = fixture();
+  const audit = JSON.parse(readFileSync(f.auditPath, 'utf8'));
+  audit.metadata.vulnerabilities.low = 1;
+  audit.metadata.vulnerabilities.total = 0;
+  writeFileSync(f.auditPath, `${JSON.stringify(audit, null, 2)}\n`);
+  refreshSupply(f, (supply) => {
+    supply.audit.vulnerabilities = audit.metadata.vulnerabilities;
+    supply.audit.canonical_sha256 = canonicalSha256(audit);
+  });
+  const result = run(f);
+  assert.notEqual(result.status, 0);
+  assert.match(
+    `${result.stderr}\n${result.stdout}`,
+    /AUDIT_VULNERABILITY_TOTAL_MISMATCH/,
+  );
+});
+
 test('registry signature debt fails closed with internally consistent evidence', () => {
   const f = fixture();
   const signatures = JSON.parse(readFileSync(f.signaturesPath, 'utf8'));
