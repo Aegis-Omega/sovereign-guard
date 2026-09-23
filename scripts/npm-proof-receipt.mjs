@@ -68,6 +68,13 @@ function tarFileCensus(tarball) {
     if (!line.startsWith('-')) {
       throw new Error(`non-regular tar entry rejected: ${line}`);
     }
+    const mode = line.slice(0, 10);
+    if (!/^-[r-][w-][x-][r-][w-][x-][r-][w-][x-]$/.test(mode)) {
+      throw new Error(`unsafe tar permission mode: ${mode}`);
+    }
+    if (mode[5] === 'w' || mode[8] === 'w') {
+      throw new Error(`group/world-writable tar entry rejected: ${mode}`);
+    }
   }
 
   for (const path of paths) {
@@ -168,6 +175,11 @@ try {
       `packed manifest identity mismatch: committed=${pkg.name}@${pkg.version} packed=${packedManifest.name}@${packedManifest.version}`,
     );
   }
+  const committedManifestCanonical = JSON.stringify(canonical(pkg));
+  const packedManifestCanonical = JSON.stringify(canonical(packedManifest));
+  if (packedManifestCanonical !== committedManifestCanonical) {
+    throw new Error('packed package.json does not canonically equal committed package.json');
+  }
 
   const forbiddenHooks = ['preinstall', 'install', 'postinstall'].filter(
     (name) => packedManifest.scripts?.[name] !== undefined,
@@ -199,7 +211,9 @@ try {
       canonical_filename_verified: second.meta.filename === expectedFilename,
       tar_paths_safe: true,
       tar_regular_files_only: true,
+      tar_permissions_safe: true,
       publish_path_allowlist_verified: true,
+      packed_manifest_canonical_equal: true,
       tar_census_matches_npm_metadata: true,
       files: second.files,
     },
@@ -220,10 +234,12 @@ try {
         ? process.env.RELEASE_TAG === `v${pkg.version}`
         : null,
       packed_manifest_identity_verified: true,
+      packed_manifest_canonical_equal: true,
       canonical_filename_verified: true,
       tar_census_independently_verified: true,
       tar_paths_safe: true,
       tar_regular_files_only: true,
+      tar_permissions_safe: true,
       publish_path_allowlist_verified: true,
       lifecycle_install_hooks_absent: true,
       reproducible_pack_verified: true,
