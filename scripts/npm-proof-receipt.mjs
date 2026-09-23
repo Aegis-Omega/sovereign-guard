@@ -182,7 +182,7 @@ try {
   }
 
   const expectedBins = {
-    sovereign-guard: './dist/bin/guard.js',
+    'sovereign-guard': './dist/bin/guard.js',
     guard: './dist/bin/guard.js',
   };
   if (packedManifest.main !== './dist/src/index.js') {
