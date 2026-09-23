@@ -58,6 +58,9 @@ if ((process.env.npm_config_engine_strict || '').toLowerCase() !== 'true') {
 }
 
 const npmVersion = command('npm', ['--version']);
+if (npmVersion !== '11.19.0') {
+  throw new Error(`ENGINE_COMPAT_NPM_TOOLCHAIN_MISMATCH actual=${npmVersion}`);
+}
 const pack = JSON.parse(command('npm', ['pack', '--json', '--ignore-scripts']));
 if (!Array.isArray(pack) || pack.length !== 1) throw new Error('ENGINE_COMPAT_PACK_RESULT_INVALID');
 const meta = pack[0];
@@ -109,6 +112,7 @@ try {
       node_major: Number(actualMajor),
       npm_version: npmVersion,
       engine_strict: true,
+      npm_toolchain_pinned: true,
     },
     verification: {
       npm_ci_completed_upstream: true,

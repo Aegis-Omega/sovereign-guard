@@ -73,6 +73,9 @@ for (const path of files) {
   if (!expectedMajors.includes(major)) fail('ENGINE_COMPAT_UNEXPECTED_MAJOR', `major=${major}`);
   if (byMajor.has(major)) fail('ENGINE_COMPAT_DUPLICATE_MAJOR', `major=${major}`);
   if (receipt.runtime?.engine_strict !== true) fail('ENGINE_COMPAT_ENGINE_STRICT_UNVERIFIED');
+  if (receipt.runtime?.npm_toolchain_pinned !== true || receipt.runtime?.npm_version !== '11.19.0') {
+    fail('ENGINE_COMPAT_NPM_TOOLCHAIN_UNVERIFIED', `major=${major}`);
+  }
   for (const flag of [
     'npm_ci_completed_upstream',
     'build_completed_upstream',
@@ -121,6 +124,7 @@ const receiptCore = {
   })),
   verification: {
     engine_strict_matrix_verified: true,
+    npm_11_19_0_matrix_verified: true,
     isolated_install_matrix_verified: true,
     public_api_matrix_verified: true,
     cli_matrix_verified: true,
