@@ -1,0 +1,22 @@
+name: Runner Probe
+
+on:
+  pull_request:
+  push:
+    branches:
+      - feat/npm-proof-carrying-release-v1
+
+permissions: {}
+
+jobs:
+  native-shell:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Native shell startup probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "RUNNER_PROBE_OK"
+          echo "sha=$GITHUB_SHA"
+          echo "runner_os=$RUNNER_OS"
