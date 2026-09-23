@@ -12,6 +12,9 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       source_sha: ${{ steps.source.outputs.sha }}
+      evidence_run_id: ${{ steps.evidence.outputs.run_id }}
+      evidence_run_attempt: ${{ steps.evidence.outputs.run_attempt }}
+      artifact_name: ${{ steps.evidence.outputs.artifact_name }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -30,6 +33,14 @@ jobs:
           test "$head" = "$event_sha"
           test "$tagged" = "$event_sha"
           echo "sha=$event_sha" >> "$GITHUB_OUTPUT"
+      - name: Bind evidence producer identity
+        id: evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "run_id=${{ github.run_id }}" >> "$GITHUB_OUTPUT"
+          echo "run_attempt=${{ github.run_attempt }}" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=sovereign-guard-npm-${{ steps.source.outputs.sha }}-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}" >> "$GITHUB_OUTPUT"
       - name: Require release source to be admitted by master history
         shell: bash
         run: |
@@ -82,7 +93,7 @@ jobs:
       - name: Upload verified npm artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: sovereign-guard-npm-${{ steps.source.outputs.sha }}
+          name: ${{ steps.evidence.outputs.artifact_name }}
           path: |
             sovereign-guard-*.tgz
             artifacts/*.json
@@ -117,9 +128,8 @@ jobs:
           test "$(npm --version)" = "11.19.0"
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          pattern: sovereign-guard-npm-*
+          name: ${{ needs.verify-package.outputs.artifact_name }}
           path: verified-package
-          merge-multiple: true
       - name: Assert exactly one verified tarball
         id: tarball
         shell: bash
@@ -132,8 +142,8 @@ jobs:
         env:
           VERIFIED_PACKAGE_ROOT: verified-package
           EXPECTED_SOURCE_SHA: ${{ needs.verify-package.outputs.source_sha }}
-          EXPECTED_RUN_ID: ${{ github.run_id }}
-          EXPECTED_RUN_ATTEMPT: ${{ github.run_attempt }}
+          EXPECTED_RUN_ID: ${{ needs.verify-package.outputs.evidence_run_id }}
+          EXPECTED_RUN_ATTEMPT: ${{ needs.verify-package.outputs.evidence_run_attempt }}
         shell: bash
         run: |
           set -euo pipefail

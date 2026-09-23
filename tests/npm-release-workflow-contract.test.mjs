@@ -37,6 +37,25 @@ test('release job reasserts the exact verified source after checkout', () => {
   );
 });
 
+test('release artifact is bound to producer run and attempt', () => {
+  assert.match(workflow, /evidence_run_id: \$\{\{ steps\.evidence\.outputs\.run_id \}\}/);
+  assert.match(workflow, /evidence_run_attempt: \$\{\{ steps\.evidence\.outputs\.run_attempt \}\}/);
+  assert.match(workflow, /artifact_name: \$\{\{ steps\.evidence\.outputs\.artifact_name \}\}/);
+  assert.match(
+    workflow,
+    /name: \$\{\{ needs\.verify-package\.outputs\.artifact_name \}\}/,
+  );
+  assert.doesNotMatch(workflow, /pattern: sovereign-guard-npm-\*/);
+  assert.match(
+    workflow,
+    /EXPECTED_RUN_ID: \$\{\{ needs\.verify-package\.outputs\.evidence_run_id \}\}/,
+  );
+  assert.match(
+    workflow,
+    /EXPECTED_RUN_ATTEMPT: \$\{\{ needs\.verify-package\.outputs\.evidence_run_attempt \}\}/,
+  );
+});
+
 test('registry authority uses committed release preflight instead of inline verifier', () => {
   assert.match(workflow, /node scripts\/npm-release-preflight\.mjs/);
   assert.doesNotMatch(workflow, /node - <<'NODE'/);
