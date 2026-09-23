@@ -38,6 +38,60 @@ function requiredEnv(name) {
   return value;
 }
 
+function packageNameFromLocation(location) {
+  if (typeof location !== 'string') fail('REGISTRY_SIGNATURE_LOCATION_INVALID');
+  const marker = 'node_modules/';
+  const index = location.lastIndexOf(marker);
+  if (index < 0) fail('REGISTRY_SIGNATURE_LOCATION_INVALID', `location=${location}`);
+  const name = location.slice(index + marker.length);
+  if (!name || name.includes('/node_modules/')) {
+    fail('REGISTRY_SIGNATURE_LOCATION_INVALID', `location=${location}`);
+  }
+  return name;
+}
+
+function verifySignatureLockBinding(entries, lock) {
+  const seenLocations = new Set();
+  for (const entry of entries) {
+    const location = entry?.location;
+    if (seenLocations.has(location)) {
+      fail('REGISTRY_SIGNATURE_LOCATION_DUPLICATE', `location=${location}`);
+    }
+    seenLocations.add(location);
+
+    const locked = lock.packages?.[location];
+    if (!locked) {
+      fail('REGISTRY_SIGNATURE_LOCK_ENTRY_MISSING', `location=${location}`);
+    }
+    const expectedName = locked.name ?? packageNameFromLocation(location);
+    if (entry?.name !== expectedName) {
+      fail(
+        'REGISTRY_SIGNATURE_PACKAGE_NAME_MISMATCH',
+        `location=${location} expected=${expectedName} actual=${entry?.name ?? '<missing>'}`,
+      );
+    }
+    if (entry?.version !== locked.version) {
+      fail(
+        'REGISTRY_SIGNATURE_PACKAGE_VERSION_MISMATCH',
+        `location=${location} expected=${locked.version ?? '<missing>'} actual=${entry?.version ?? '<missing>'}`,
+      );
+    }
+    if (entry?.registry !== 'https://registry.npmjs.org/') {
+      fail(
+        'REGISTRY_SIGNATURE_REGISTRY_MISMATCH',
+        `location=${location} registry=${entry?.registry ?? '<missing>'}`,
+      );
+    }
+    if (
+      typeof locked.resolved !== 'string' ||
+      !locked.resolved.startsWith('https://registry.npmjs.org/')
+    ) {
+      fail('LOCK_REGISTRY_ORIGIN_MISMATCH', `location=${location}`);
+    }
+  }
+  return seenLocations.size;
+}
+
 function normalizeSbom(input) {
   const sbom = structuredClone(input);
   if (Object.hasOwn(sbom, 'serialNumber')) delete sbom.serialNumber;
@@ -160,6 +214,9 @@ if (supply.verification?.package_receipt_bound !== true) fail('SUPPLY_CHAIN_PACK
 if (supply.verification?.lockfile_bound !== true) fail('SUPPLY_CHAIN_LOCKFILE_UNBOUND');
 if (supply.verification?.zero_vulnerability_snapshot_verified !== true) fail('SUPPLY_CHAIN_AUDIT_UNVERIFIED');
 if (supply.verification?.registry_signatures_verified !== true) fail('SUPPLY_CHAIN_SIGNATURES_UNVERIFIED');
+if (supply.verification?.registry_signatures_lock_bound !== true) {
+  fail('SUPPLY_CHAIN_SIGNATURE_LOCK_BINDING_UNVERIFIED');
+}
 if (supply.verification?.provenance_attestations_observed !== true) fail('SUPPLY_CHAIN_PROVENANCE_UNVERIFIED');
 if (supply.verification?.normalized_sbom_bound !== true) fail('SUPPLY_CHAIN_SBOM_UNBOUND');
 if (supply.verification?.local_64_suite_bound !== false) fail('LOCAL_64_SUITE_AUTHORITY_LAUNDERING');
@@ -232,12 +289,14 @@ const verified = Array.isArray(signatures.verified) ? signatures.verified : null
 const missing = Array.isArray(signatures.missing) ? signatures.missing : null;
 const invalid = Array.isArray(signatures.invalid) ? signatures.invalid : null;
 if (!verified || !missing || !invalid) fail('REGISTRY_SIGNATURE_METADATA_MISSING');
+const verifiedLockBindingCount = verifySignatureLockBinding(verified, lock);
 const provenanceCount = verified.filter((entry) => Boolean(entry?.attestations?.provenance)).length;
 if (
   supply.signatures?.verified_count !== verified.length ||
   supply.signatures?.missing_count !== missing.length ||
   supply.signatures?.invalid_count !== invalid.length ||
-  supply.signatures?.provenance_attestation_count !== provenanceCount
+  supply.signatures?.provenance_attestation_count !== provenanceCount ||
+  supply.signatures?.lock_bound_verified_count !== verifiedLockBindingCount
 ) {
   fail('REGISTRY_SIGNATURE_COUNT_MISMATCH');
 }

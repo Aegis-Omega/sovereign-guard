@@ -48,6 +48,14 @@ function fixture({
           name: 'sovereign-guard',
           version: '1.0.0',
         },
+        'node_modules/tsx': {
+          version: '4.23.12',
+          resolved: 'https://registry.npmjs.org/tsx/-/tsx-4.23.12.tgz',
+        },
+        'node_modules/esbuild': {
+          version: '0.28.2',
+          resolved: 'https://registry.npmjs.org/esbuild/-/esbuild-0.28.2.tgz',
+        },
       },
     }) + '\n',
   );
@@ -84,8 +92,20 @@ function fixture({
     invalid,
     missing,
     verified: [
-      { name: 'tsx', version: '4.23.12', attestations: { provenance: { predicateType: 'https://slsa.dev/provenance/v1' } } },
-      { name: 'esbuild', version: '0.28.2', attestations: { provenance: { predicateType: 'https://slsa.dev/provenance/v1' } } },
+      {
+        name: 'tsx',
+        version: '4.23.12',
+        location: 'node_modules/tsx',
+        registry: 'https://registry.npmjs.org/',
+        attestations: { provenance: { predicateType: 'https://slsa.dev/provenance/v1' } },
+      },
+      {
+        name: 'esbuild',
+        version: '0.28.2',
+        location: 'node_modules/esbuild',
+        registry: 'https://registry.npmjs.org/',
+        attestations: { provenance: { predicateType: 'https://slsa.dev/provenance/v1' } },
+      },
     ],
   }, null, 2) + '\n');
 
@@ -156,6 +176,8 @@ test('supply-chain receipt binds exact source, package receipt, lock, audit, sig
   assert.equal(receipt.signatures.invalid_count, 0);
   assert.equal(receipt.signatures.verified_count, 2);
   assert.equal(receipt.signatures.provenance_attestation_count, 2);
+  assert.equal(receipt.signatures.lock_bound_verified_count, 2);
+  assert.equal(receipt.verification.registry_signatures_lock_bound, true);
   assert.equal(receipt.sbom.normalization.removed_serial_number, true);
   assert.equal(receipt.sbom.normalization.removed_metadata_timestamp, true);
   assert.match(receipt.sbom.normalized_sha256, /^[0-9a-f]{64}$/);
@@ -225,6 +247,35 @@ test('inconsistent npm audit total fails closed', () => {
   assert.match(
     `${result.stderr}\n${result.stdout}`,
     /AUDIT_VULNERABILITY_TOTAL_MISMATCH/,
+  );
+});
+
+test('verified registry signature must bind to an exact lockfile location and version', () => {
+  const root = fixture();
+  const path = join(root, 'artifacts', 'npm-signatures.json');
+  const signatures = JSON.parse(readFileSync(path, 'utf8'));
+  signatures.verified[0].version = '9.9.9';
+  writeFileSync(path, `${JSON.stringify(signatures, null, 2)}\n`);
+  const result = run(root);
+  assert.notEqual(result.status, 0);
+  assert.match(
+    `${result.stderr}\n${result.stdout}`,
+    /REGISTRY_SIGNATURE_PACKAGE_VERSION_MISMATCH/,
+  );
+});
+
+test('verified registry signature for an unlocked location fails closed', () => {
+  const root = fixture();
+  const path = join(root, 'artifacts', 'npm-signatures.json');
+  const signatures = JSON.parse(readFileSync(path, 'utf8'));
+  signatures.verified[0].location = 'node_modules/not-locked';
+  signatures.verified[0].name = 'not-locked';
+  writeFileSync(path, `${JSON.stringify(signatures, null, 2)}\n`);
+  const result = run(root);
+  assert.notEqual(result.status, 0);
+  assert.match(
+    `${result.stderr}\n${result.stdout}`,
+    /REGISTRY_SIGNATURE_LOCK_ENTRY_MISSING/,
   );
 });
 

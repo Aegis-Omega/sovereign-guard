@@ -78,6 +78,10 @@ function fixture() {
         name: 'sovereign-guard',
         version: '1.0.0',
       },
+      'node_modules/tsx': {
+        version: '4.23.12',
+        resolved: 'https://registry.npmjs.org/tsx/-/tsx-4.23.12.tgz',
+      },
     },
   };
   const lockPath = join(root, 'package-lock.json');
@@ -137,6 +141,8 @@ function fixture() {
       {
         name: 'tsx',
         version: '4.23.12',
+        location: 'node_modules/tsx',
+        registry: 'https://registry.npmjs.org/',
         attestations: { provenance: { predicateType: 'https://slsa.dev/provenance/v1' } },
       },
     ],
@@ -195,6 +201,7 @@ function fixture() {
       missing_count: 0,
       invalid_count: 0,
       provenance_attestation_count: 1,
+      lock_bound_verified_count: 1,
       canonical_sha256: canonicalSha256(signatures),
     },
     sbom: {
@@ -209,6 +216,7 @@ function fixture() {
       lockfile_bound: true,
       zero_vulnerability_snapshot_verified: true,
       registry_signatures_verified: true,
+      registry_signatures_lock_bound: true,
       provenance_attestations_observed: true,
       normalized_sbom_bound: true,
       local_64_suite_bound: false,
@@ -355,6 +363,22 @@ test('inconsistent audit total fails closed even when receipt and manifest are r
   assert.match(
     `${result.stderr}\n${result.stdout}`,
     /AUDIT_VULNERABILITY_TOTAL_MISMATCH/,
+  );
+});
+
+test('registry signature lock binding mismatch fails closed', () => {
+  const f = fixture();
+  const signatures = JSON.parse(readFileSync(f.signaturesPath, 'utf8'));
+  signatures.verified[0].version = '9.9.9';
+  writeFileSync(f.signaturesPath, `${JSON.stringify(signatures, null, 2)}\n`);
+  refreshSupply(f, (supply) => {
+    supply.signatures.canonical_sha256 = canonicalSha256(signatures);
+  });
+  const result = run(f);
+  assert.notEqual(result.status, 0);
+  assert.match(
+    `${result.stderr}\n${result.stdout}`,
+    /REGISTRY_SIGNATURE_PACKAGE_VERSION_MISMATCH/,
   );
 });
 
