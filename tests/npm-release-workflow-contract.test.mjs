@@ -12,6 +12,17 @@ test('npm release workflow starts only at the published-release boundary', () =>
   assert.doesNotMatch(workflow, /types: \[created\]/);
 });
 
+test('release event SHA and tag are bound before verification', () => {
+  assert.match(workflow, /ref: \$\{\{ github\.sha \}\}/);
+  assert.match(workflow, /event_sha='\$\{\{ github\.sha \}\}'/);
+  assert.match(workflow, /test "\$head" = "\$event_sha"/);
+  assert.match(workflow, /test "\$tagged" = "\$event_sha"/);
+  assert.match(
+    workflow,
+    /release-npm:[\s\S]*?ref: \$\{\{ needs\.verify-package\.outputs\.source_sha \}\}/,
+  );
+});
+
 test('release source must be admitted by master history', () => {
   assert.match(
     workflow,

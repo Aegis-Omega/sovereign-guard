@@ -15,19 +15,21 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
-      - name: Assert release tag resolves to checked-out commit
+      - name: Bind release event SHA to release tag
         id: source
         shell: bash
         run: |
           set -euo pipefail
           tag='${{ github.event.release.tag_name }}'
+          event_sha='${{ github.sha }}'
           head="$(git rev-parse HEAD)"
           tagged="$(git rev-parse "${tag}^{commit}")"
-          test "$head" = "$tagged"
-          echo "sha=$head" >> "$GITHUB_OUTPUT"
+          test "$head" = "$event_sha"
+          test "$tagged" = "$event_sha"
+          echo "sha=$event_sha" >> "$GITHUB_OUTPUT"
       - name: Require release source to be admitted by master history
         shell: bash
         run: |
@@ -98,7 +100,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ needs.verify-package.outputs.source_sha }}
           persist-credentials: false
       - name: Reassert release checkout source
         shell: bash
