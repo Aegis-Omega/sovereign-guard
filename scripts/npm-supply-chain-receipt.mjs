@@ -117,6 +117,94 @@ function verifySignatureLockBinding(entries, lock) {
   return seenLocations.size;
 }
 
+function npmPurl(name, version) {
+  const encodedName = name.startsWith('@') ? `%40${name.slice(1)}` : name;
+  return `pkg:npm/${encodedName}@${version}`;
+}
+
+function verifySbomLockBinding(sbom, lock, packageIdentity) {
+  if (!Array.isArray(sbom.components)) fail('SBOM_COMPONENTS_MISSING');
+  if (!Array.isArray(sbom.dependencies)) fail('SBOM_DEPENDENCIES_MISSING');
+
+  const lockIdentities = new Set();
+  for (const [location, locked] of Object.entries(lock.packages ?? {})) {
+    if (!location || !locked || typeof locked.version !== 'string') continue;
+    const name = locked.name ?? packageNameFromLocation(location);
+    lockIdentities.add(`${name}@${locked.version}`);
+  }
+
+  const rootRef = `${packageIdentity.name}@${packageIdentity.version}`;
+  const root = sbom.metadata?.component;
+  if (
+    root?.type !== 'library' ||
+    root?.name !== packageIdentity.name ||
+    root?.version !== packageIdentity.version ||
+    root?.['bom-ref'] !== rootRef ||
+    root?.purl !== npmPurl(packageIdentity.name, packageIdentity.version)
+  ) {
+    fail('SBOM_ROOT_IDENTITY_MISMATCH');
+  }
+
+  const knownRefs = new Set([rootRef]);
+  const componentRefs = new Set();
+  for (const component of sbom.components) {
+    if (
+      component?.type !== 'library' ||
+      typeof component?.name !== 'string' ||
+      typeof component?.version !== 'string'
+    ) {
+      fail('SBOM_COMPONENT_IDENTITY_INVALID');
+    }
+    const ref = `${component.name}@${component.version}`;
+    if (componentRefs.has(ref)) fail('SBOM_COMPONENT_DUPLICATE', `ref=${ref}`);
+    componentRefs.add(ref);
+
+    if (!lockIdentities.has(ref)) {
+      fail('SBOM_COMPONENT_NOT_LOCKED', `ref=${ref}`);
+    }
+    if (component['bom-ref'] !== ref) {
+      fail('SBOM_COMPONENT_REF_MISMATCH', `ref=${ref}`);
+    }
+    if (component.purl !== npmPurl(component.name, component.version)) {
+      fail('SBOM_COMPONENT_PURL_MISMATCH', `ref=${ref}`);
+    }
+    knownRefs.add(ref);
+  }
+
+  const dependencyRefs = new Set();
+  for (const dependency of sbom.dependencies) {
+    const ref = dependency?.ref;
+    if (typeof ref !== 'string' || !knownRefs.has(ref)) {
+      fail('SBOM_DEPENDENCY_REF_UNKNOWN', `ref=${ref ?? '<missing>'}`);
+    }
+    if (dependencyRefs.has(ref)) fail('SBOM_DEPENDENCY_REF_DUPLICATE', `ref=${ref}`);
+    dependencyRefs.add(ref);
+    if (!Array.isArray(dependency.dependsOn)) {
+      fail('SBOM_DEPENDENCY_TARGETS_INVALID', `ref=${ref}`);
+    }
+    const seenTargets = new Set();
+    for (const target of dependency.dependsOn) {
+      if (!knownRefs.has(target)) {
+        fail('SBOM_DEPENDENCY_TARGET_UNKNOWN', `ref=${ref} target=${target}`);
+      }
+      if (seenTargets.has(target)) {
+        fail('SBOM_DEPENDENCY_TARGET_DUPLICATE', `ref=${ref} target=${target}`);
+      }
+      seenTargets.add(target);
+    }
+  }
+
+  if (!dependencyRefs.has(rootRef)) fail('SBOM_ROOT_DEPENDENCY_NODE_MISSING');
+  for (const ref of componentRefs) {
+    if (!dependencyRefs.has(ref)) fail('SBOM_COMPONENT_DEPENDENCY_NODE_MISSING', `ref=${ref}`);
+  }
+
+  return {
+    lock_bound_component_count: componentRefs.size,
+    dependency_node_count: dependencyRefs.size,
+  };
+}
+
 function normalizeSbom(input) {
   const sbom = structuredClone(input);
   const removedSerialNumber = Object.hasOwn(sbom, 'serialNumber');
@@ -233,13 +321,7 @@ const provenanceAttestationCount = verified.filter(
 if (provenanceAttestationCount === 0) fail('PROVENANCE_ATTESTATION_EMPTY');
 
 if (sbomRaw.bomFormat !== 'CycloneDX') fail('SBOM_FORMAT_MISMATCH');
-const sbomComponent = sbomRaw.metadata?.component;
-if (
-  sbomComponent?.name !== packageReceipt.package?.name ||
-  sbomComponent?.version !== packageReceipt.package?.version
-) {
-  fail('SBOM_PACKAGE_IDENTITY_MISMATCH');
-}
+const sbomBinding = verifySbomLockBinding(sbomRaw, lock, packageReceipt.package);
 
 const normalized = normalizeSbom(sbomRaw);
 const normalizedSbomSha256 = canonicalSha256(normalized.sbom);
@@ -295,7 +377,9 @@ const receiptCore = {
     format: sbomRaw.bomFormat,
     spec_version: sbomRaw.specVersion,
     component_count: Array.isArray(sbomRaw.components) ? sbomRaw.components.length : 0,
-    dependency_edge_count: Array.isArray(sbomRaw.dependencies) ? sbomRaw.dependencies.length : 0,
+    dependency_edge_count: sbomRaw.dependencies.length,
+    lock_bound_component_count: sbomBinding.lock_bound_component_count,
+    dependency_node_count: sbomBinding.dependency_node_count,
     normalized_sha256: normalizedSbomSha256,
     normalization: {
       removed_serial_number: normalized.removedSerialNumber,
@@ -312,6 +396,8 @@ const receiptCore = {
     registry_signatures_lock_bound: true,
     provenance_attestations_observed: true,
     normalized_sbom_bound: true,
+    sbom_lock_bound: true,
+    sbom_graph_closed: true,
     local_64_suite_bound: false,
   },
   non_claims: {

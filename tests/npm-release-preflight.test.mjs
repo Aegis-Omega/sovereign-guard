@@ -156,10 +156,27 @@ function fixture() {
     serialNumber: 'urn:uuid:fixture',
     metadata: {
       timestamp: '2026-09-23T00:00:00Z',
-      component: { name: 'sovereign-guard', version: '1.0.0' },
+      component: {
+        type: 'library',
+        name: 'sovereign-guard',
+        version: '1.0.0',
+        'bom-ref': 'sovereign-guard@1.0.0',
+        purl: 'pkg:npm/sovereign-guard@1.0.0',
+      },
     },
-    components: [],
-    dependencies: [],
+    components: [
+      {
+        type: 'library',
+        name: 'tsx',
+        version: '4.23.12',
+        'bom-ref': 'tsx@4.23.12',
+        purl: 'pkg:npm/tsx@4.23.12',
+      },
+    ],
+    dependencies: [
+      { ref: 'sovereign-guard@1.0.0', dependsOn: ['tsx@4.23.12'] },
+      { ref: 'tsx@4.23.12', dependsOn: [] },
+    ],
   };
   const sbomPath = join(artifacts, 'sbom.cdx.json');
   writeFileSync(sbomPath, `${JSON.stringify(sbom, null, 2)}\n`);
@@ -207,6 +224,8 @@ function fixture() {
     sbom: {
       format: 'CycloneDX',
       spec_version: '1.6',
+      lock_bound_component_count: 1,
+      dependency_node_count: 2,
       normalized_sha256: canonicalSha256(normalizeSbom(sbom)),
     },
     verification: {
@@ -219,6 +238,8 @@ function fixture() {
       registry_signatures_lock_bound: true,
       provenance_attestations_observed: true,
       normalized_sbom_bound: true,
+      sbom_lock_bound: true,
+      sbom_graph_closed: true,
       local_64_suite_bound: false,
     },
   };
@@ -394,6 +415,41 @@ test('registry signature debt fails closed with internally consistent evidence',
   const result = run(f);
   assert.notEqual(result.status, 0);
   assert.match(`${result.stderr}\n${result.stdout}`, /REGISTRY_SIGNATURE_DEBT/);
+});
+
+test('foreign SBOM component fails closed even with refreshed receipt and manifest', () => {
+  const f = fixture();
+  const sbom = JSON.parse(readFileSync(f.sbomPath, 'utf8'));
+  sbom.components.push({
+    type: 'library',
+    name: 'not-locked',
+    version: '1.0.0',
+    'bom-ref': 'not-locked@1.0.0',
+    purl: 'pkg:npm/not-locked@1.0.0',
+  });
+  sbom.dependencies.push({ ref: 'not-locked@1.0.0', dependsOn: [] });
+  writeFileSync(f.sbomPath, `${JSON.stringify(sbom, null, 2)}\n`);
+  refreshSupply(f, (supply) => {
+    supply.sbom.normalized_sha256 = canonicalSha256(normalizeSbom(sbom));
+    supply.sbom.lock_bound_component_count = 2;
+    supply.sbom.dependency_node_count = 3;
+  });
+  const result = run(f);
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stderr}\n${result.stdout}`, /SBOM_COMPONENT_NOT_LOCKED/);
+});
+
+test('dangling SBOM dependency target fails closed with refreshed hashes', () => {
+  const f = fixture();
+  const sbom = JSON.parse(readFileSync(f.sbomPath, 'utf8'));
+  sbom.dependencies[0].dependsOn.push('ghost@1.0.0');
+  writeFileSync(f.sbomPath, `${JSON.stringify(sbom, null, 2)}\n`);
+  refreshSupply(f, (supply) => {
+    supply.sbom.normalized_sha256 = canonicalSha256(normalizeSbom(sbom));
+  });
+  const result = run(f);
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stderr}\n${result.stdout}`, /SBOM_DEPENDENCY_TARGET_UNKNOWN/);
 });
 
 test('SBOM evidence hash mismatch fails closed', () => {

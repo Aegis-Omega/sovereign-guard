@@ -121,13 +121,30 @@ function fixture({
         name: 'sovereign-guard',
         version: '1.0.0',
         'bom-ref': 'sovereign-guard@1.0.0',
+        purl: 'pkg:npm/sovereign-guard@1.0.0',
       },
     },
     components: [
-      { type: 'library', name: 'tsx', version: '4.23.12', 'bom-ref': 'tsx@4.23.12' },
-      { type: 'library', name: 'esbuild', version: '0.28.2', 'bom-ref': 'esbuild@0.28.2' },
+      {
+        type: 'library',
+        name: 'tsx',
+        version: '4.23.12',
+        'bom-ref': 'tsx@4.23.12',
+        purl: 'pkg:npm/tsx@4.23.12',
+      },
+      {
+        type: 'library',
+        name: 'esbuild',
+        version: '0.28.2',
+        'bom-ref': 'esbuild@0.28.2',
+        purl: 'pkg:npm/esbuild@0.28.2',
+      },
     ],
-    dependencies: [],
+    dependencies: [
+      { ref: 'sovereign-guard@1.0.0', dependsOn: ['tsx@4.23.12'] },
+      { ref: 'tsx@4.23.12', dependsOn: ['esbuild@0.28.2'] },
+      { ref: 'esbuild@0.28.2', dependsOn: [] },
+    ],
   }, null, 2) + '\n');
 
   return root;
@@ -180,6 +197,10 @@ test('supply-chain receipt binds exact source, package receipt, lock, audit, sig
   assert.equal(receipt.verification.registry_signatures_lock_bound, true);
   assert.equal(receipt.sbom.normalization.removed_serial_number, true);
   assert.equal(receipt.sbom.normalization.removed_metadata_timestamp, true);
+  assert.equal(receipt.sbom.lock_bound_component_count, 2);
+  assert.equal(receipt.sbom.dependency_node_count, 3);
+  assert.equal(receipt.verification.sbom_lock_bound, true);
+  assert.equal(receipt.verification.sbom_graph_closed, true);
   assert.match(receipt.sbom.normalized_sha256, /^[0-9a-f]{64}$/);
   assert.match(receipt.lockfile.sha256, /^[0-9a-f]{64}$/);
   assert.equal(receipt.verification.authority, 'REMOTE_EXACT_SOURCE_SUPPLY_CHAIN_VERIFIED');
@@ -233,6 +254,35 @@ test('tampered package receipt root fails closed before supply authority is emit
   const result = run(root);
   assert.notEqual(result.status, 0);
   assert.match(`${result.stderr}\n${result.stdout}`, /PACKAGE_RECEIPT_ROOT_INVALID/);
+});
+
+test('foreign SBOM component fails closed even when structurally valid', () => {
+  const root = fixture();
+  const path = join(root, 'artifacts', 'sbom.cdx.json');
+  const sbom = JSON.parse(readFileSync(path, 'utf8'));
+  sbom.components.push({
+    type: 'library',
+    name: 'not-locked',
+    version: '1.0.0',
+    'bom-ref': 'not-locked@1.0.0',
+    purl: 'pkg:npm/not-locked@1.0.0',
+  });
+  sbom.dependencies.push({ ref: 'not-locked@1.0.0', dependsOn: [] });
+  writeFileSync(path, `${JSON.stringify(sbom, null, 2)}\n`);
+  const result = run(root);
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stderr}\n${result.stdout}`, /SBOM_COMPONENT_NOT_LOCKED/);
+});
+
+test('dangling SBOM dependency target fails closed', () => {
+  const root = fixture();
+  const path = join(root, 'artifacts', 'sbom.cdx.json');
+  const sbom = JSON.parse(readFileSync(path, 'utf8'));
+  sbom.dependencies[0].dependsOn.push('ghost@1.0.0');
+  writeFileSync(path, `${JSON.stringify(sbom, null, 2)}\n`);
+  const result = run(root);
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stderr}\n${result.stdout}`, /SBOM_DEPENDENCY_TARGET_UNKNOWN/);
 });
 
 test('one LOW vulnerability fails closed', () => {
