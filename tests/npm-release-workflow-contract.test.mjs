@@ -37,6 +37,17 @@ test('release job reasserts the exact verified source after checkout', () => {
   );
 });
 
+test('engine matrix tarball digest must equal canonical verify-package tarball', () => {
+  assert.match(
+    workflow,
+    /tarball_sha256: \$\{\{ steps\.package_digest\.outputs\.tarball_sha256 \}\}/,
+  );
+  assert.match(
+    workflow,
+    /test '\$\{\{ needs\.node-engine-compatibility-summary\.outputs\.tarball_sha256 \}\}' = '\$\{\{ needs\.verify-package\.outputs\.tarball_sha256 \}\}'/,
+  );
+});
+
 test('release artifact is bound to producer run and attempt', () => {
   assert.match(workflow, /evidence_run_id: \$\{\{ steps\.evidence\.outputs\.run_id \}\}/);
   assert.match(workflow, /evidence_run_attempt: \$\{\{ steps\.evidence\.outputs\.run_attempt \}\}/);

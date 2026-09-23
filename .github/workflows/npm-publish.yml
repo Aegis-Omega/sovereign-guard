@@ -17,6 +17,7 @@ jobs:
       artifact_name: ${{ steps.evidence.outputs.artifact_name }}
       artifact_id: ${{ steps.upload.outputs.artifact-id }}
       artifact_digest: ${{ steps.upload.outputs.artifact-digest }}
+      tarball_sha256: ${{ steps.package_digest.outputs.tarball_sha256 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -75,6 +76,14 @@ jobs:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
           KEEP_NPM_TARBALL: '1'
         run: npm run verify:package
+      - name: Bind canonical package tarball digest
+        id: package_digest
+        shell: bash
+        run: |
+          set -euo pipefail
+          digest="$(node -e "const r=require('./artifacts/NpmPackageReceiptV1.json'); process.stdout.write(r.package.sha256)")"
+          [[ "$digest" =~ ^[0-9a-f]{64}$ ]]
+          echo "tarball_sha256=$digest" >> "$GITHUB_OUTPUT"
       - name: Produce canonical supply-chain receipt
         env:
           AEGIS_SOURCE_SHA: ${{ steps.source.outputs.sha }}
@@ -205,6 +214,7 @@ jobs:
           test '${{ needs.node-engine-compatibility-summary.outputs.source_sha }}' = '${{ needs.verify-package.outputs.source_sha }}'
           [[ '${{ needs.node-engine-compatibility-summary.outputs.receipt_sha256 }}' =~ ^[0-9a-f]{64}$ ]]
           [[ '${{ needs.node-engine-compatibility-summary.outputs.tarball_sha256 }}' =~ ^[0-9a-f]{64}$ ]]
+          test '${{ needs.node-engine-compatibility-summary.outputs.tarball_sha256 }}' = '${{ needs.verify-package.outputs.tarball_sha256 }}'
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 24
