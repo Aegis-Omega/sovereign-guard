@@ -309,6 +309,9 @@ if (supply.verification?.registry_signatures_lock_bound !== true) {
   fail('SUPPLY_CHAIN_SIGNATURE_LOCK_BINDING_UNVERIFIED');
 }
 if (supply.verification?.provenance_attestations_observed !== true) fail('SUPPLY_CHAIN_PROVENANCE_UNVERIFIED');
+if (supply.verification?.provenance_attestations_cover_verified_set !== true) {
+  fail('SUPPLY_CHAIN_PROVENANCE_COVERAGE_UNVERIFIED');
+}
 if (supply.verification?.normalized_sbom_bound !== true) fail('SUPPLY_CHAIN_SBOM_UNBOUND');
 if (supply.verification?.sbom_lock_bound !== true) fail('SUPPLY_CHAIN_SBOM_LOCK_BINDING_UNVERIFIED');
 if (supply.verification?.sbom_graph_closed !== true) fail('SUPPLY_CHAIN_SBOM_GRAPH_UNVERIFIED');
@@ -408,7 +411,17 @@ const missing = Array.isArray(signatures.missing) ? signatures.missing : null;
 const invalid = Array.isArray(signatures.invalid) ? signatures.invalid : null;
 if (!verified || !missing || !invalid) fail('REGISTRY_SIGNATURE_METADATA_MISSING');
 const verifiedLockBindingCount = verifySignatureLockBinding(verified, lock);
-const provenanceCount = verified.filter((entry) => Boolean(entry?.attestations?.provenance)).length;
+const provenanceCount = verified.filter(
+  (entry) =>
+    entry?.attestations?.provenance?.predicateType ===
+    'https://slsa.dev/provenance/v1',
+).length;
+if (provenanceCount !== verified.length) {
+  fail(
+    'PROVENANCE_ATTESTATION_COVERAGE_INCOMPLETE',
+    `verified=${verified.length} provenance=${provenanceCount}`,
+  );
+}
 if (
   supply.signatures?.verified_count !== verified.length ||
   supply.signatures?.missing_count !== missing.length ||
@@ -419,7 +432,7 @@ if (
   fail('REGISTRY_SIGNATURE_COUNT_MISMATCH');
 }
 if (missing.length !== 0 || invalid.length !== 0) fail('REGISTRY_SIGNATURE_DEBT');
-if (verified.length === 0 || provenanceCount === 0) fail('PROVENANCE_ATTESTATION_EMPTY');
+if (verified.length === 0) fail('REGISTRY_SIGNATURE_VERIFICATION_EMPTY');
 
 if (sbom.bomFormat !== 'CycloneDX') fail('SBOM_FORMAT_MISMATCH');
 

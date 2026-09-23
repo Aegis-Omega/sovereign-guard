@@ -196,6 +196,7 @@ test('supply-chain receipt binds exact source, package receipt, lock, audit, sig
   assert.equal(receipt.signatures.invalid_count, 0);
   assert.equal(receipt.signatures.verified_count, 2);
   assert.equal(receipt.signatures.provenance_attestation_count, 2);
+  assert.equal(receipt.verification.provenance_attestations_cover_verified_set, true);
   assert.equal(receipt.signatures.lock_bound_verified_count, 2);
   assert.equal(receipt.verification.registry_signatures_lock_bound, true);
   assert.equal(receipt.sbom.normalization.removed_serial_number, true);
@@ -340,6 +341,20 @@ test('verified registry signature for an unlocked location fails closed', () => 
   assert.match(
     `${result.stderr}\n${result.stdout}`,
     /REGISTRY_SIGNATURE_LOCK_ENTRY_MISSING/,
+  );
+});
+
+test('every verified registry signature must carry SLSA v1 provenance', () => {
+  const root = fixture();
+  const path = join(root, 'artifacts', 'npm-signatures.json');
+  const signatures = JSON.parse(readFileSync(path, 'utf8'));
+  signatures.verified[0].attestations.provenance.predicateType = 'https://example.invalid/provenance';
+  writeFileSync(path, `${JSON.stringify(signatures, null, 2)}\n`);
+  const result = run(root);
+  assert.notEqual(result.status, 0);
+  assert.match(
+    `${result.stderr}\n${result.stdout}`,
+    /PROVENANCE_ATTESTATION_COVERAGE_INCOMPLETE/,
   );
 });
 

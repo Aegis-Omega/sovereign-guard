@@ -328,9 +328,16 @@ if (verified.length === 0) fail('REGISTRY_SIGNATURE_VERIFICATION_EMPTY');
 const verifiedLockBindingCount = verifySignatureLockBinding(verified, lock);
 
 const provenanceAttestationCount = verified.filter(
-  (entry) => Boolean(entry?.attestations?.provenance),
+  (entry) =>
+    entry?.attestations?.provenance?.predicateType ===
+    'https://slsa.dev/provenance/v1',
 ).length;
-if (provenanceAttestationCount === 0) fail('PROVENANCE_ATTESTATION_EMPTY');
+if (provenanceAttestationCount !== verified.length) {
+  fail(
+    'PROVENANCE_ATTESTATION_COVERAGE_INCOMPLETE',
+    `verified=${verified.length} provenance=${provenanceAttestationCount}`,
+  );
+}
 
 if (sbomRaw.bomFormat !== 'CycloneDX') fail('SBOM_FORMAT_MISMATCH');
 const sbomBinding = verifySbomLockBinding(sbomRaw, lock, packageReceipt.package);
@@ -409,6 +416,7 @@ const receiptCore = {
     registry_signatures_verified: true,
     registry_signatures_lock_bound: true,
     provenance_attestations_observed: true,
+    provenance_attestations_cover_verified_set: true,
     normalized_sbom_bound: true,
     sbom_lock_bound: true,
     sbom_graph_closed: true,

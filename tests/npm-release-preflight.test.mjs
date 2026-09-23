@@ -240,6 +240,7 @@ function fixture() {
       registry_signatures_verified: true,
       registry_signatures_lock_bound: true,
       provenance_attestations_observed: true,
+      provenance_attestations_cover_verified_set: true,
       normalized_sbom_bound: true,
       sbom_lock_bound: true,
       sbom_graph_closed: true,
@@ -418,6 +419,23 @@ test('registry signature lock binding mismatch fails closed', () => {
   assert.match(
     `${result.stderr}\n${result.stdout}`,
     /REGISTRY_SIGNATURE_PACKAGE_VERSION_MISMATCH/,
+  );
+});
+
+test('incomplete SLSA provenance coverage fails closed', () => {
+  const f = fixture();
+  const signatures = JSON.parse(readFileSync(f.signaturesPath, 'utf8'));
+  signatures.verified[0].attestations.provenance.predicateType = 'https://example.invalid/provenance';
+  writeFileSync(f.signaturesPath, `${JSON.stringify(signatures, null, 2)}\n`);
+  refreshSupply(f, (supply) => {
+    supply.signatures.provenance_attestation_count = 0;
+    supply.signatures.canonical_sha256 = canonicalSha256(signatures);
+  });
+  const result = run(f);
+  assert.notEqual(result.status, 0);
+  assert.match(
+    `${result.stderr}\n${result.stdout}`,
+    /PROVENANCE_ATTESTATION_COVERAGE_INCOMPLETE/,
   );
 });
 
