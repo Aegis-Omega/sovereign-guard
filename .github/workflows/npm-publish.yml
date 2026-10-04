@@ -113,6 +113,85 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
+
+  attest-package:
+    needs: verify-package
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    outputs:
+      provenance_attestation_id: ${{ steps.provenance.outputs.attestation-id }}
+      provenance_attestation_url: ${{ steps.provenance.outputs.attestation-url }}
+      sbom_attestation_id: ${{ steps.sbom_attestation.outputs.attestation-id }}
+      sbom_attestation_url: ${{ steps.sbom_attestation.outputs.attestation-url }}
+      bundle_artifact_id: ${{ steps.upload_attestations.outputs.artifact-id }}
+      bundle_artifact_digest: ${{ steps.upload_attestations.outputs.artifact-digest }}
+    steps:
+      - name: Assert immutable verified-artifact producer metadata
+        shell: bash
+        env:
+          ARTIFACT_ID: ${{ needs.verify-package.outputs.artifact_id }}
+          ARTIFACT_DIGEST: ${{ needs.verify-package.outputs.artifact_digest }}
+        run: |
+          set -euo pipefail
+          [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$ARTIFACT_DIGEST" =~ ^(sha256:)?[0-9a-f]{64}$ ]]
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          artifact-ids: ${{ needs.verify-package.outputs.artifact_id }}
+          path: verified-package
+          merge-multiple: true
+          digest-mismatch: error
+      - name: Rebind exact tarball before attestation
+        id: subject
+        shell: bash
+        env:
+          EXPECTED_TARBALL_SHA256: ${{ needs.verify-package.outputs.tarball_sha256 }}
+        run: |
+          set -euo pipefail
+          mapfile -t tgz < <(find verified-package -maxdepth 1 -type f -name 'sovereign-guard-*.tgz' -print)
+          test "${#tgz[@]}" -eq 1
+          [[ "$EXPECTED_TARBALL_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          actual="$(sha256sum "${tgz[0]}" | awk '{print $1}')"
+          test "$actual" = "$EXPECTED_TARBALL_SHA256"
+          test -s verified-package/artifacts/sbom.cdx.json
+          echo "path=${tgz[0]}" >> "$GITHUB_OUTPUT"
+      - name: Attest SLSA build provenance
+        id: provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-path: ${{ steps.subject.outputs.path }}
+      - name: Attest CycloneDX SBOM
+        id: sbom_attestation
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-path: ${{ steps.subject.outputs.path }}
+          sbom-path: verified-package/artifacts/sbom.cdx.json
+      - name: Bind Sigstore bundles for independent replay
+        shell: bash
+        env:
+          PROVENANCE_BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
+          SBOM_BUNDLE: ${{ steps.sbom_attestation.outputs.bundle-path }}
+        run: |
+          set -euo pipefail
+          test -s "$PROVENANCE_BUNDLE"
+          test -s "$SBOM_BUNDLE"
+          mkdir -p github-attestations
+          cp "$PROVENANCE_BUNDLE" github-attestations/provenance.sigstore.json
+          cp "$SBOM_BUNDLE" github-attestations/sbom.sigstore.json
+          sha256sum github-attestations/*.sigstore.json > github-attestations/attestations.sha256
+      - name: Upload GitHub attestation replay bundle
+        id: upload_attestations
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: sovereign-guard-github-attestations-${{ needs.verify-package.outputs.source_sha }}-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: github-attestations
+          if-no-files-found: error
+          retention-days: 90
+
   node-engine-compatibility:
     runs-on: ubuntu-24.04
     strategy:
@@ -191,7 +270,7 @@ jobs:
           retention-days: 30
 
   release-npm:
-    needs: [verify-package, node-engine-compatibility-summary]
+    needs: [verify-package, node-engine-compatibility-summary, attest-package]
     runs-on: ubuntu-24.04
     environment: npm
     permissions:
@@ -256,6 +335,23 @@ jobs:
         run: |
           set -euo pipefail
           node scripts/npm-release-preflight.mjs '${{ steps.tarball.outputs.path }}'
+      - name: Require exact GitHub provenance and SBOM attestations
+        shell: bash
+        env:
+          PROVENANCE_ATTESTATION_ID: ${{ needs.attest-package.outputs.provenance_attestation_id }}
+          PROVENANCE_ATTESTATION_URL: ${{ needs.attest-package.outputs.provenance_attestation_url }}
+          SBOM_ATTESTATION_ID: ${{ needs.attest-package.outputs.sbom_attestation_id }}
+          SBOM_ATTESTATION_URL: ${{ needs.attest-package.outputs.sbom_attestation_url }}
+          BUNDLE_ARTIFACT_ID: ${{ needs.attest-package.outputs.bundle_artifact_id }}
+          BUNDLE_ARTIFACT_DIGEST: ${{ needs.attest-package.outputs.bundle_artifact_digest }}
+        run: |
+          set -euo pipefail
+          [[ "$PROVENANCE_ATTESTATION_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$SBOM_ATTESTATION_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$BUNDLE_ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$BUNDLE_ARTIFACT_DIGEST" =~ ^(sha256:)?[0-9a-f]{64}$ ]]
+          [[ "$PROVENANCE_ATTESTATION_URL" == https://github.com/* ]]
+          [[ "$SBOM_ATTESTATION_URL" == https://github.com/* ]]
       - name: Resolve explicit release mode
         id: mode
         shell: bash

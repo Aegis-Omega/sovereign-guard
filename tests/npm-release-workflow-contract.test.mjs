@@ -93,5 +93,53 @@ test('GitHub Actions dependencies are pinned to Node24-native signed release SHA
   assert.match(workflow, /actions\/setup-node@820762786026740c76f36085b0efc47a31fe5020/);
   assert.match(workflow, /actions\/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a/);
   assert.match(workflow, /actions\/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c/);
+  assert.match(workflow, /actions\/attest@1e69f48acb82d1966a394da916b4c1698aa569d6/);
   assert.doesNotMatch(workflow, /11d5960a326750d5838078e36cf38b85af677262|49933ea5288caeca8642d1e84afbd3f7d6820020|ea165f8d65b6e75b540449e92b4886f43607fa02|d3f86a106a0bac45b974a628896c90dbdf5c8093/);
+});
+
+
+test('GitHub attestations are isolated in a least-privilege post-verification job', () => {
+  assert.match(
+    workflow,
+    /attest-package:[\s\S]*?permissions:\n\s+contents: read\n\s+id-token: write\n\s+attestations: write\n\s+artifact-metadata: write/,
+  );
+  assert.match(
+    workflow,
+    /attest-package:[\s\S]*?artifact-ids: \$\{\{ needs\.verify-package\.outputs\.artifact_id \}\}/,
+  );
+  assert.match(
+    workflow,
+    /attest-package:[\s\S]*?digest-mismatch: error/,
+  );
+});
+
+test('exact tarball gets both SLSA provenance and CycloneDX SBOM attestations', () => {
+  const matches = workflow.match(/actions\/attest@1e69f48acb82d1966a394da916b4c1698aa569d6/g) ?? [];
+  assert.equal(matches.length, 2);
+  assert.match(workflow, /Attest SLSA build provenance[\s\S]*?subject-path: \$\{\{ steps\.subject\.outputs\.path \}\}/);
+  assert.match(
+    workflow,
+    /Attest CycloneDX SBOM[\s\S]*?subject-path: \$\{\{ steps\.subject\.outputs\.path \}\}[\s\S]*?sbom-path: verified-package\/artifacts\/sbom\.cdx\.json/,
+  );
+  assert.match(workflow, /test "\$actual" = "\$EXPECTED_TARBALL_SHA256"/);
+});
+
+test('npm publication is blocked unless both GitHub attestations and replay bundle exist', () => {
+  assert.match(
+    workflow,
+    /release-npm:\n\s+needs: \[verify-package, node-engine-compatibility-summary, attest-package\]/,
+  );
+  assert.match(workflow, /PROVENANCE_ATTESTATION_ID: \$\{\{ needs\.attest-package\.outputs\.provenance_attestation_id \}\}/);
+  assert.match(workflow, /SBOM_ATTESTATION_ID: \$\{\{ needs\.attest-package\.outputs\.sbom_attestation_id \}\}/);
+  assert.match(workflow, /BUNDLE_ARTIFACT_DIGEST: \$\{\{ needs\.attest-package\.outputs\.bundle_artifact_digest \}\}/);
+  const attestGate = workflow.indexOf('Require exact GitHub provenance and SBOM attestations');
+  const modeGate = workflow.indexOf('Resolve explicit release mode');
+  assert.ok(attestGate >= 0 && modeGate > attestGate);
+});
+
+test('Sigstore attestation bundles are retained with an independent checksum manifest', () => {
+  assert.match(workflow, /github-attestations\/provenance\.sigstore\.json/);
+  assert.match(workflow, /github-attestations\/sbom\.sigstore\.json/);
+  assert.match(workflow, /sha256sum github-attestations\/\*\.sigstore\.json > github-attestations\/attestations\.sha256/);
+  assert.match(workflow, /sovereign-guard-github-attestations-/);
 });
