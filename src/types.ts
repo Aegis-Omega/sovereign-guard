@@ -35,11 +35,15 @@ export interface Finding {
 
 // ─── Rules ────────────────────────────────────────────────────────
 
+export type SourceLanguage = 'javascript' | 'typescript' | 'python';
+
 export interface Rule {
     id: string;
     name: string;
     severity: Severity;
     description: string;
+    /** Languages explicitly supported by this rule. Omitted rules remain JS/TS-only for compatibility. */
+    languages?: readonly SourceLanguage[];
     check(content: string, filePath: string): Finding[];
 }
 
@@ -81,8 +85,8 @@ export interface GuardConfig {
 }
 
 export const DEFAULT_CONFIG: GuardConfig = {
-    include: ['**/*.ts', '**/*.js'],
-    exclude: ['node_modules/**', 'dist/**', '.next/**', 'coverage/**', '*.d.ts'],
+    include: ['**/*.ts', '**/*.js', '**/*.py'],
+    exclude: ['node_modules/**', 'dist/**', '.next/**', 'coverage/**', '*.d.ts', '.venv/**', 'venv/**', '__pycache__/**'],
     disableRules: [],
     minSeverity: 'LOW',
     maxFiles: 500,
