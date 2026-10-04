@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { GuardConfig, GuardReport, Finding, Severity, SEVERITY_ORDER } from './types';
+import { GuardConfig, GuardReport, Finding, Rule, SEVERITY_ORDER } from './types';
 import { ALL_RULES } from './rules';
 import { queryKnowledge } from './knowledge';
 
@@ -74,6 +74,7 @@ export class SovereignScanner {
                 const content = await fs.promises.readFile(file, 'utf8');
                 for (const rule of enabledRules) {
                     if (SEVERITY_ORDER[rule.severity] > minSeverityOrder) continue;
+                    if (!this.ruleAppliesToFile(rule, file)) continue;
 
                     const findings = rule.check(content, file);
 
@@ -107,6 +108,13 @@ export class SovereignScanner {
             cognitiveROI: tokens > 0 ? (allFindings.length / tokens) : 0,
             tokensConsumed: tokens
         };
+    }
+
+    private ruleAppliesToFile(rule: Rule, filePath: string): boolean {
+        // Python is opt-in. Legacy rules without language metadata retain their
+        // historical JS/TS behavior and cannot accidentally parse Python text.
+        if (path.extname(filePath).toLowerCase() !== '.py') return true;
+        return rule.languages?.includes('python') ?? false;
     }
 
     private getExtensions(): string[] {
